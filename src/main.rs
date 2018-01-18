@@ -18,7 +18,7 @@ const METADIR: &str = "/home/nyorain/.local/share/nodes/.meta";
 struct Node {
     id: u64,
 }
- 
+
 impl Node {
     fn meta_path(&self) -> PathBuf {
         let mut pb = PathBuf::from(METADIR);
@@ -26,7 +26,7 @@ impl Node {
         pb.push(&self.id.to_string());
         pb
     }
- 
+
     fn node_path(&self) -> PathBuf {
         let mut pb = PathBuf::from(NODESDIR);
         pb.push(&self.id.to_string());
@@ -63,14 +63,14 @@ fn command_add(args: &clap::ArgMatches) -> i32 {
 
     state.set("last.created", toml::Value::Integer(node.id as i64));
     state.set("last.accessed", toml::Value::Integer(node.id as i64));
-    
+
     // output information
     if args.is_present("name") {
         println!("Created Node {}: {}", node.id, name);
     } else {
         println!("Created Node {}", node.id);
     }
- 
+
     0
 }
 
@@ -121,9 +121,14 @@ fn command_create(args: &clap::ArgMatches) -> i32 {
     nodes::toml_set(&mut meta, "changed", toml::Value::from(now.clone()));
     nodes::toml_set(&mut meta, "accessed", toml::Value::from(now.clone()));
 
-    if let Some(tags) = args.value_of("tags") {
-        let tags: Vec<_> = tags.split_whitespace().collect();
-        nodes::toml_set(&mut meta, "tags", toml::Value::from(tags));
+    if let Some(tags) = args.values_of("tags") {
+        let mut collected: Vec<toml::Value> = Vec::new();
+        for tag in tags {
+            collected.append(&mut tag.split_whitespace()
+                .map(|x| toml::Value::String(x.to_string()))
+                .collect());
+        }
+        nodes::toml_set(&mut meta, "tags", toml::Value::Array(collected));
     }
 
     nodes::save_toml_file(&meta, node.meta_path());
@@ -152,14 +157,21 @@ fn nodes_list() -> Vec<u64> {
         }).collect()
 }
 
-fn command_ls(args: &clap::ArgMatches) -> i32 {
-    let mut ids = nodes_list();
-    ids.sort();
+struct FoundNode {
+    id: u64,
+    name: String,
+    summary: String,
+    accessed: time::Tm
+}
 
+fn command_ls(args: &clap::ArgMatches) -> i32 {
     let name = args.value_of("name");
     let tag = args.value_of("tag");
+    let sort = value_t!(args, "sort", NodeSort).unwrap_or_else(|e| e.exit());
+    let mut num = value_t!(args, "num", u64).unwrap_or_else(|e| e.exit());
+    let mut nodes: Vec<FoundNode> = Vec::new();
 
-    for id in ids {
+    for id in nodes_list() {
         let node = Node {id};
         let meta = nodes::parse_toml_file(node.meta_path());
         let nname = nodes::toml_get(&meta, "name").unwrap().as_str().unwrap();
@@ -185,7 +197,7 @@ fn command_ls(args: &clap::ArgMatches) -> i32 {
                             break;
                         }
                     } else { // we have non-tag string
-                        println!("Invalid tag type {} for node {}", 
+                        println!("Invalid tag type {} for node {}",
                             ntag.type_str(), id);
                     }
                 }
@@ -196,7 +208,36 @@ fn command_ls(args: &clap::ArgMatches) -> i32 {
             }
         }
 
-        println!("{}: \t{}", id, nname);
+        // accessed
+        let accessed = time::strptime(
+            nodes::toml_get(&meta, "accessed").unwrap().
+            as_str().unwrap(), "%Y-%m-%dT%H:%M:%S").unwrap(); // rfc3339
+        let node = FoundNode {
+            id,
+            name: nname.to_string(),
+            summary: "".to_string(),
+            accessed,
+        };
+        nodes.push(node);
+    }
+
+    match sort {
+        NodeSort::ID => nodes.sort_by_key(|v| v.id),
+        NodeSort::LA => nodes.sort_by_key(|v| v.accessed),
+        NodeSort::Name => nodes.sort_by_key(|v| v.name.clone()), // TODO
+    };
+
+    if !args.is_present("reverse") {
+        nodes.reverse();
+    }
+
+    for node in nodes {
+        if num == 0 {
+            break;
+        }
+
+        println!("{}:\t{}\t{}", node.id, node.name, node.summary);
+        num -= 1;
     }
 
     0
@@ -206,7 +247,13 @@ fn command_open(args: &clap::ArgMatches) -> i32 {
     let id = value_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
     let node = Node {id};
 
-    let path = node.node_path();
+    let meta = args.is_present("meta");
+    let path = if meta  {
+        node.meta_path()
+    } else {
+        node.node_path()
+    };
+
     if !path.exists() {
         println!("Node {} does not exist", id);
         return -1;
@@ -216,27 +263,53 @@ fn command_open(args: &clap::ArgMatches) -> i32 {
     let mut child = Command::new("nvim").arg(pname).spawn().expect("spawn");
     child.wait().expect("wait");
 
-    let mut state = State::load();
-    state.set("last.accessed", toml::Value::Integer(id as i64));
+    if !meta {
+        let mut state = State::load();
+        state.set("last.accessed", toml::Value::Integer(id as i64));
+
+        let mut meta = nodes::parse_toml_file(node.meta_path());
+        let now = time::now().rfc3339().to_string();
+        nodes::toml_set(&mut meta, "accessed", toml::Value::from(now));
+        nodes::save_toml_file(&meta, node.meta_path());
+    }
 
     0
 }
 
+// in which way to sort a node list
+arg_enum!{
+    #[derive(PartialEq, Debug)]
+    enum NodeSort {
+        ID, // by node id
+        LA, // last accessed
+        Name
+    }
+}
+
 fn ret_main() -> i32 {
+    fn is_uint(v: String) -> Result<(), String> {
+        if let Err(_) = v.parse::<u64>() {
+            Err(format!("Could not parse '{}' as unsigned number", v))
+        } else {
+            Ok(())
+        }
+    }
+
     let matches = clap_app!(nodes =>
         (version: "0.1")
         (setting: clap::AppSettings::VersionlessSubcommands)
         (setting: clap::AppSettings::SubcommandRequired)
         (author: "nyorain [at gmail dot com]")
-        (about: "Manages local nodes")
+        (about: "Manages your node system from the command line")
         (@subcommand create =>
             (about: "Creates a new node")
             (alias: "c")
             (@arg name: !required index(1) "The name, id by default")
-            (@arg tags: -t --tags +takes_value !required "Tags to add")
+            (@arg tags: -t --tags +takes_value !required ... +use_delimiter
+                "Tags for the node to create")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
-            (@arg id: +required index(1) "The nodes id")
+            (@arg id: +required index(1) {is_uint} "The nodes id")
         ) (@subcommand add =>
             (about: "Creates a new node from an existing file")
             (alias: "a")
@@ -246,10 +319,22 @@ fn ret_main() -> i32 {
             (about: "Lists existing notes")
             (@arg name: index(1) "Only list nodes with this name")
             (@arg tag: -t --tag +takes_value "Only list nodes with this tag")
+            (@arg num: -n --num +takes_value
+                default_value("10")
+                {is_uint}
+                "Maximum number of nodes to show")
+            (@arg sort: -s --sort
+                +case_insensitive
+                default_value("id")
+                possible_values(&NodeSort::variants())
+                +takes_value "Order of displayed nodes")
+            (@arg reverse: -r --reverse !takes_value !required
+                "Reverses the order")
         ) (@subcommand open =>
             (about: "Opens a node")
             (alias: "o")
-            (@arg id: +required index(1) "Id of node to open")
+            (@arg id: +required index(1) {is_uint} "Id of node to open")
+            (@arg meta: -m --meta "Open the meta file instead")
         )
     ).get_matches();
 
