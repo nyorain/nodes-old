@@ -2,17 +2,17 @@ extern crate toml;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const STATEFILE: &str = "/home/nyorain/.local/share/nodes/.meta/state";
 
 /// Represents a loaded toml file.
 /// Uses toml-rs internally so will not preserve whitespace and value
 /// order. Offers additional functionality.
-pub struct TomlFile {
-    toml: Option<toml::Value>,
-    file: PathBuf
-}
+// pub struct TomlFile {
+//     toml: Option<toml::Value>,
+//     file: PathBuf
+// }
 
 /// Represents the node state.
 pub struct State {

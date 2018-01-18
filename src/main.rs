@@ -60,6 +60,9 @@ fn command_add(args: &clap::ArgMatches) -> i32 {
     nodes::toml_set(&mut meta, "changed", toml::Value::from(now.clone()));
     nodes::toml_set(&mut meta, "accessed", toml::Value::from(now.clone()));
     nodes::save_toml_file(&meta, node.meta_path());
+
+    state.set("last.created", toml::Value::Integer(node.id as i64));
+    state.set("last.accessed", toml::Value::Integer(node.id as i64));
     
     // output information
     if args.is_present("name") {
@@ -117,7 +120,16 @@ fn command_create(args: &clap::ArgMatches) -> i32 {
     nodes::toml_set(&mut meta, "created", toml::Value::from(now.clone()));
     nodes::toml_set(&mut meta, "changed", toml::Value::from(now.clone()));
     nodes::toml_set(&mut meta, "accessed", toml::Value::from(now.clone()));
+
+    if let Some(tags) = args.value_of("tags") {
+        let tags: Vec<_> = tags.split_whitespace().collect();
+        nodes::toml_set(&mut meta, "tags", toml::Value::from(tags));
+    }
+
     nodes::save_toml_file(&meta, node.meta_path());
+
+    state.set("last.created", toml::Value::Integer(node.id as i64));
+    state.set("last.accessed", toml::Value::Integer(node.id as i64));
 
     // output information
     if args.is_present("name") {
@@ -129,21 +141,62 @@ fn command_create(args: &clap::ArgMatches) -> i32 {
     0
 }
 
-fn command_ls(_args: &clap::ArgMatches) -> i32 {
-    let mut ids: Vec<_> = fs::read_dir(NODESDIR).unwrap()
+fn nodes_list() -> Vec<u64> {
+    fs::read_dir(NODESDIR).unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| !p.is_dir())
-        .map(|p| -> u64 {p.file_stem().unwrap()
+        .map(|p| -> u64 { p
+            .file_stem().unwrap()
             .to_str().unwrap()
             .parse().unwrap()
-        }).collect();
+        }).collect()
+}
 
+fn command_ls(args: &clap::ArgMatches) -> i32 {
+    let mut ids = nodes_list();
     ids.sort();
+
+    let name = args.value_of("name");
+    let tag = args.value_of("tag");
+
     for id in ids {
         let node = Node {id};
         let meta = nodes::parse_toml_file(node.meta_path());
-        let name = nodes::toml_get(&meta, "name").unwrap().as_str().unwrap();
-        println!("{}: \t{}", id, name);
+        let nname = nodes::toml_get(&meta, "name").unwrap().as_str().unwrap();
+
+        // check if node has name
+        if let Some(name) = name {
+            if name != nname {
+                continue;
+            }
+        }
+
+        // check for tag
+        if let Some(tag) = tag {
+            let mut found = false;
+            let ntags = nodes::toml_get(&meta, "tags")
+                .and_then(|t| t.as_array()); // (optional) tags array
+
+            if let Some(nntags) = ntags { // if there are tags for node
+                for ntag in nntags { // for every tag
+                    if let Some(ntag) = ntag.as_str() { // if tag is string
+                        if ntag == tag {
+                            found = true;
+                            break;
+                        }
+                    } else { // we have non-tag string
+                        println!("Invalid tag type {} for node {}", 
+                            ntag.type_str(), id);
+                    }
+                }
+            }
+
+            if !found {
+                continue;
+            }
+        }
+
+        println!("{}: \t{}", id, nname);
     }
 
     0
@@ -163,7 +216,8 @@ fn command_open(args: &clap::ArgMatches) -> i32 {
     let mut child = Command::new("nvim").arg(pname).spawn().expect("spawn");
     child.wait().expect("wait");
 
-    // TODO: modify state: last accessed/last changed
+    let mut state = State::load();
+    state.set("last.accessed", toml::Value::Integer(id as i64));
 
     0
 }
@@ -179,6 +233,7 @@ fn ret_main() -> i32 {
             (about: "Creates a new node")
             (alias: "c")
             (@arg name: !required index(1) "The name, id by default")
+            (@arg tags: -t --tags +takes_value !required "Tags to add")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
             (@arg id: +required index(1) "The nodes id")
@@ -188,7 +243,9 @@ fn ret_main() -> i32 {
             (@arg file: +required index(1) "The file to add")
             (@arg name: !required index(2) "Name of new node, id by default")
         ) (@subcommand ls =>
-            (about: "Lists all existing notes (id: name)")
+            (about: "Lists existing notes")
+            (@arg name: index(1) "Only list nodes with this name")
+            (@arg tag: -t --tag +takes_value "Only list nodes with this tag")
         ) (@subcommand open =>
             (about: "Opens a node")
             (alias: "o")
