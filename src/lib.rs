@@ -69,7 +69,7 @@ impl Drop for State {
     }
 }
 
-/// Parses the toml file at the given path and returns the 
+/// Parses the toml file at the given path and returns the
 /// toplevel toml value
 pub fn parse_toml_file<P: AsRef<Path>>(path: P) -> toml::Value {
     let mut f = File::open(path).expect("Failed to open toml file");
