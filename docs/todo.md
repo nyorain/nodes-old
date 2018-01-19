@@ -1,0 +1,27 @@
+# TODO list for nodes:
+
+- [ ] toy around with additional node metadata
+  - [ ] color
+  - [ ] custom metadata
+- [ ] node links
+  - [ ] in which way to retrieve/set them?
+- [ ] more general metadata way (allow user to set metadata)
+- [ ] general extension framwork (specification)
+  - [ ] anything to specify at all?
+- [ ] mutliple file types
+  - [ ] way to define editors/viewers/previews in config
+  - [ ] mime types?
+  - [ ] node collections (ordered? lookup?) (how of use?)
+  - [ ] node template types?
+  - [ ] how can extensions use/define own types?
+- [ ] clean up implementation (i.e. make real library)
+- [ ] multiple storages (as a specification)
+- [ ] advanced find/search patterns
+  - [ ] multiple tags (absence and presence)
+  - [ ] content in nodes (absence and presence)
+  - [ ] in/outside a given date range
+  - [ ] content in name (absense and presence)
+  - [ ] support regex
+- [ ] manging utility
+  - [ ] node to filesystem file
+  - [ ] get node path
