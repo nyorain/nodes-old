@@ -8,6 +8,8 @@ extern crate clap;
 use std::path::PathBuf;
 use std::path::Path;
 use std::fs;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::process::Command;
 
 use nodes::State;
@@ -91,6 +93,49 @@ fn command_rm(args: &clap::ArgMatches) -> i32 {
     0
 }
 
+/// Trims the given string to the length max_length.
+/// The last three chars will be "..." if the string was longer
+/// than max_length.
+fn short_string(lstr: &str, max_length: usize) -> String {
+    let mut too_long = false;
+    let mut s = String::new();
+    let mut append = String::new();
+
+    for (i, c) in lstr.chars().enumerate() {
+        if i == max_length {
+            too_long = true;
+            break;
+        } else if i >= max_length - 3 {
+            append.push(c);
+        } else {
+            s.push(c);
+        }
+    }
+
+    s.push_str(if too_long { "..." } else { append.as_str() });
+    s
+}
+
+fn read_summary(path: &PathBuf) -> String {
+    let f = match File::open(path) {
+        Ok(v) => v,
+        Err(_) => return "".to_string(),
+    };
+
+    let f = BufReader::new(&f);
+    let line = match f.lines().next() {
+        Some(v) => v,
+        _ => return "".to_string(),
+    };
+
+    let line = match line {
+        Ok(v) => v,
+        Err(_) => return "".to_string(),
+    };
+
+    line
+}
+
 fn command_create(args: &clap::ArgMatches) -> i32 {
     let mut state = State::load();
     let node = Node {id: state.next_id()};
@@ -110,7 +155,7 @@ fn command_create(args: &clap::ArgMatches) -> i32 {
     state.use_id();
     let name = match args.value_of("name") {
         Some(name) => name.to_string(),
-        None => node.id.to_string()
+        None => "".to_string()
     };
 
     // set meta data
@@ -164,6 +209,9 @@ struct FoundNode {
     accessed: time::Tm
 }
 
+const NAME_SIZE: usize = 20;
+const SUMMARY_SIZE: usize = 50;
+
 fn command_ls(args: &clap::ArgMatches) -> i32 {
     let name = args.value_of("name");
     let tag = args.value_of("tag");
@@ -208,14 +256,17 @@ fn command_ls(args: &clap::ArgMatches) -> i32 {
             }
         }
 
+        let summary = read_summary(&node.node_path());
+        let summary = short_string(summary.as_str(), SUMMARY_SIZE);
+
         // accessed
         let accessed = time::strptime(
             nodes::toml_get(&meta, "accessed").unwrap().
             as_str().unwrap(), "%Y-%m-%dT%H:%M:%S").unwrap(); // rfc3339
         let node = FoundNode {
             id,
-            name: nname.to_string(),
-            summary: "".to_string(),
+            name: short_string(nname, NAME_SIZE),
+            summary: short_string(summary.as_str(), SUMMARY_SIZE),
             accessed,
         };
         nodes.push(node);
@@ -236,7 +287,9 @@ fn command_ls(args: &clap::ArgMatches) -> i32 {
             break;
         }
 
-        println!("{}:\t{}\t{}", node.id, node.name, node.summary);
+        println!("{}:\t{:<w2$}    {:<w3$}",
+            node.id, node.name, node.summary,
+            w2 = NAME_SIZE, w3 = SUMMARY_SIZE);
         num -= 1;
     }
 
