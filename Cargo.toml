@@ -1,7 +1,7 @@
 [package]
 name = "nodes"
 version = "0.1.0"
-authors = ["nyorain <nyorain@gmail.com>"]
+authors = ["nyorain"]
 
 [dependencies]
 toml = "0.4"

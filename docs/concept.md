@@ -1,7 +1,7 @@
 - Base: file format specification
 	- What is a "node"
-	- extendable
-	- does not specify its concents, rather a header or some common ground
+	- extensible
+	- does not specify its contents, rather a header or some common ground
 - Can be extended with plugins and stuff
 	- everything is programmable, automatable
 - the result/goal:
@@ -49,17 +49,15 @@ It could e.g. be a list of some stuff i made in the last month [1].
 [4](file://~/programming/nodes/concept.md)
 ```
 
-- Everything still as compatible as possible with existing tech (at least
-  at the beginning, as long as sane). Integrate well with text-editors
-  
+- goal: integrate well with text-editors
 
 So: what is a node?
 -------------------
 
 - a piece of information
 	- can link to other nodes
-	- can consist of other nodes, like a photoalbum or an album
-	- can be an atomic piece of information like a picture or a text
+	- can consist of other nodes, like an album or a todo list
+	- can be an atomic piece of information like a picture, text, song or url
 	- or a code snippet
 	- or some custom type (like a conversation, a memory, a book chapter,
 	  a drawing, a film or video, a protocol, whatever basically)
@@ -73,9 +71,9 @@ basic operations:
 	- create a node with the given text content
 	- create a custom node type (in editor?)
 - you can delete a node
-	- will be moved to trash, not immediately deleted
+	- [if desired, configurable] will be moved to trash first
 - you can shows all nodes in various ways/with various filters
-	- in a hierachy
+	- like in a hierachy, list or graph
 	- filter: date/name/tag/other methods like color or tone
 - track history
 	- e.g. easily refer to last created/edited nodes
@@ -87,15 +85,18 @@ basic operations:
 
 advanced (later on, maybe, mainly just ideas):
 
-- you can install plugins & extensions, register handlers basically
+- you can install plugins & extensions, register handlers basically?
+	- probably not do anything like it, just use different programs then
+	- no specification for plugin or extensions
 - you can import a set of nodes
 - you can export all nodes in various ways
 - you can connect to an internet instance to synchronize
-- you can integrate your nodes with git
+- you can integrate your nodes with git (or other history, sync system)
 
 ## Note type ideas
 
 - playlist. Can be exported to a real playlist (with various settings)
 - photo album
-- ideas/concepts etc
+- ideas/concepts etc, general short thoughts
+- todo list
 - project, as in programming project
