@@ -4,7 +4,48 @@ The default implementation allows to deal with nodes from the command line.
 It has no graphical user interface but can be connected to external programs
 like an editor, browser or image/video/audio programs.
 
-### Commands
+
+## Patterns
+
+Many commands allow to filter nodes using a pattern.
+A pattern basically allows to specify information about a node, like
+
+ - its tags
+ - name
+ - content
+ - id
+ - various dates (created/modified/accessed)
+
+For most information, various modes and combinations are supported
+(regex/simple(full)/ simple(contain)/absent, etc).
+Also supports basic logic combinations.
+
+Example patterns:
+
+```
+
+"+t:a,b,c" => a nodes that has tags "a" and "b" and "c"
+"+t:a,b,c;-t:d" => as above, but additionally must not have tag d
+"+t:a|b" => must contain at least one of tags "a", "b"
+"-t:a|b" => must contain at least one of tags "a", "b" not
+"+t:<todo>" => must contain a tag that matches the "todo" regex
+"-t:<todo>" => not tag must match "todo" regex
+"t=a,b" => tags must be exactly "a" and "b"
+
+"n=some name" => the name must be exactly some name
+"+n:to*do" => name must match "to*do"
+"-n:to*do" => name must not match "to*do"
+
+"id:59..102" => id must be in range 59..102
+"id:<343" => id must be <343
+"id:>=343" => id must be >=343
+
+```
+
+Multiple of those patterns can be combined using a ';' like this:
+"+n:todo;+t:todo" => name must contain todo and there must be "todo" tag.
+
+### Commands [outdated, was a first concept]
 
 Commands that have a shortcut can be used with the shortcut.
 For example `nodes a example.png` will add the example.png file

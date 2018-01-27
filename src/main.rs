@@ -17,7 +17,6 @@ fn ret_main() -> i32 {
     let matches = clap_app!(nodes =>
         (version: "0.1")
         (setting: clap::AppSettings::VersionlessSubcommands)
-        (setting: clap::AppSettings::SubcommandRequired)
         (author: "nyorain [at gmail dot com]")
         (about: "Manages your node system from the command line")
         (@subcommand create =>
@@ -27,7 +26,7 @@ fn ret_main() -> i32 {
             (@arg tags: -t --tag +takes_value !required ... +use_delimiter
                 "Tag the node")
             (@arg type: --type +takes_value !required "Node type")
-            (@arg content: -c --content +takes_value !required 
+            (@arg content: -c --content +takes_value !required
                 "Node content")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
@@ -45,13 +44,19 @@ fn ret_main() -> i32 {
                 default_value("10")
                 {is_uint}
                 "Maximum number of nodes to show")
+            (@arg lines: -l --lines +takes_value
+                {is_uint}
+                "How many lines to show at maximum from a node")
+            (@arg full: -f --full conflicts_with("lines") "Print the full node")
             (@arg sort: -s --sort
                 +case_insensitive
                 default_value("id")
                 possible_values(&nodes::NodeSort::variants())
                 +takes_value "Order of displayed nodes")
-            (@arg reverse: -r --reverse !takes_value !required
+            (@arg reverse: -R --rev !takes_value !required
                 "Reverses the order")
+            (@arg reverse_list: -r --revlist !takes_value !required
+                "Reverses the display order")
         ) (@subcommand show =>
             (about: "Shows a node")
             (alias: "s")
@@ -75,7 +80,7 @@ fn ret_main() -> i32 {
         ("edit", Some(s)) => nodes::command_edit(s),
         ("show", Some(s)) => nodes::command_show(s),
         ("estate", Some(s)) => nodes::command_open_state(s),
-        _           => panic!("This should not happen"),
+        _ => nodes::command_ls(&clap::ArgMatches::default()) // default
     }
 }
 
