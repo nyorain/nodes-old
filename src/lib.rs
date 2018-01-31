@@ -1,10 +1,12 @@
 extern crate time;
 extern crate toml;
+extern crate regex;
 
 #[macro_use]
 extern crate clap;
 
 pub mod parse;
+pub mod pattern;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -14,6 +16,7 @@ use std::process::Command;
 use std::fs;
 use std::iter::Iterator;
 use std::io::{BufRead, BufReader};
+use std::io;
 
 const NODESDIR: &str = "/home/nyorain/.local/share/nodes/nodes";
 const METADIR: &str = "/home/nyorain/.local/share/nodes/.meta";
@@ -65,7 +68,7 @@ impl Node {
     fn new(id: u64) -> Node {
         Node { id }
     }
-    
+
     /// Returns the parsed meta toml value.
     fn meta(&self) -> parse::Value {
         parse::Value::parse(self.meta_path())
@@ -79,7 +82,7 @@ impl Node {
         pb.push(&self.id.to_string());
         pb
     }
-    
+
     /// Returns whether the node exists.
     fn exists(&self) -> bool {
         if self.node_path().exists() {
@@ -159,21 +162,23 @@ pub fn command_add(args: &clap::ArgMatches) -> i32 {
     0
 }
 
-pub fn command_rm(args: &clap::ArgMatches) -> i32 {
-    let id = value_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
+pub fn remove_node(id: u64) -> io::Result<()> {
     let node = Node::new(id);
+    fs::remove_file(node.node_path())?;
+    fs::remove_file(node.meta_path())?;
+    Ok(())
+}
 
-    if let Err(e) = fs::remove_file(node.node_path()) {
-        println!("Could not remove node {}: {}", id, e);
-        return -1;
+pub fn command_rm(args: &clap::ArgMatches) -> i32 {
+    let ids = values_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
+    let mut res = 0;
+    for id in ids {
+        if remove_node(id).is_err() {
+            res += 1;
+        }
     }
 
-    if let Err(e) = fs::remove_file(node.meta_path()) {
-        println!("Error removing meta file: {}: {}", id, e);
-    }
-
-    println!("Removed node {}", id);
-    0
+    res
 }
 
 /// Trims the given string to the length max_length.
@@ -602,5 +607,54 @@ pub fn command_open_state(_: &clap::ArgMatches) -> i32 {
     Command::new("nvim").arg(STATEFILE)
         .spawn().expect("spawn")
         .wait().expect("wait");
+    0
+}
+
+pub fn command_dev(_: &clap::ArgMatches) -> i32 {
+    let mut tree = pattern::NodePred::new();
+    let root = tree.add_root(pattern::PredNode::Not);
+    tree.add(root, pattern::PredNode::Pred(pattern::Pred {
+        entry: "tags".to_string(),
+        pred_type: pattern::PredType::Matches("todo".to_string())
+    }));
+
+    let num = 100;
+    let lines = 1;
+    let mut nodes: Vec<FoundNode> = Vec::new();
+
+    for id in nodes_list() {
+        let mut node = Node::new(id);
+        let mut meta = node.meta();
+        let nname = meta.get("name").unwrap().as_str().unwrap();
+
+        // check predicate
+        if !pattern::node_matches(&meta.toml, &tree) {
+            continue;
+        }
+
+        // push node and data
+        let summary = node_summary(&node.node_path(), lines);
+        let accessed = meta.get("accessed").unwrap().
+            as_str().unwrap();
+        let accessed = time::strptime(accessed, "%Y-%m-%dT%H:%M:%S")
+            .unwrap(); // rfc3339
+        let node = FoundNode {
+            id,
+            name: nname.to_string(),
+            summary: summary,
+            accessed,
+        };
+
+        nodes.push(node);
+    }
+
+    nodes.sort_by_key(|v| v.id);
+    nodes.reverse();
+    nodes.truncate(num);
+
+    for node in nodes {
+        list_node(&node, lines);
+    }
+
     0
 }

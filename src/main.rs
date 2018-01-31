@@ -30,7 +30,9 @@ fn ret_main() -> i32 {
                 "Node content")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
-            (@arg id: +required index(1) {is_uint} "The nodes id")
+            (@arg id: +required +multiple index(1) 
+                {is_uint} 
+                "The nodes id. Can also specify multiple nodes")
         ) (@subcommand add =>
             (about: "Creates a new node from an existing file")
             (alias: "a")
@@ -69,6 +71,8 @@ fn ret_main() -> i32 {
             (@arg meta: -m --meta "Edit the meta file instead")
         ) (@subcommand estate =>
             (about: "Edit state file (development)")
+        ) (@subcommand dev =>
+            (about: "Testing command, you should bever see this")
         )
     ).get_matches();
 
@@ -80,6 +84,7 @@ fn ret_main() -> i32 {
         ("edit", Some(s)) => nodes::command_edit(s),
         ("show", Some(s)) => nodes::command_show(s),
         ("estate", Some(s)) => nodes::command_open_state(s),
+        ("dev", Some(s)) => nodes::command_dev(s),
         _ => nodes::command_ls(&clap::ArgMatches::default()) // default
     }
 }

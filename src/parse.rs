@@ -1,5 +1,4 @@
 extern crate toml;
-
 use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
@@ -8,7 +7,7 @@ use std::io;
 
 /// Represents a parsed toml value.
 pub struct Value {
-    toml: toml::Value
+    pub toml: toml::Value
 }
 
 impl Value {

@@ -4,6 +4,86 @@ The default implementation allows to deal with nodes from the command line.
 It has no graphical user interface but can be connected to external programs
 like an editor, browser or image/video/audio programs.
 
+## Patterns the second
+
+Start with simple logic.
+
+```
+has("color") // node has meta entry "color"
+has_string("color") // node has meta entry "color" with type string
+has_array("color) // node has meta entry "color" with type array
+
+!has("color") // node doesn't have meta entry "color"
+// similiarly there are && (and), || (or)
+
+// node has meta entry "color" with type array and this array
+// contains at least one element "red"
+array_contains("color", "red")
+```
+
+available functionality
+	- `has(entry)`
+	- `has_<type>(entry)` [type from {string,array,int,date}]
+	- `array_contains(entry, value)`
+	- `equal(entry, value)` [required entry type deducted from value (?)]
+	- `larger(entry, value)`
+	- `smaller(entry, value)`
+	- `string_matches(entry, regex-like)`
+	- `array_contains_match(entry, regex-like)`
+
+Wrap it up in some syntax:
+All whitespace is ignored.
+Startsymbol S, we use // as separating symbol since the syntax uses |.
+
+```
+
+// first rough try
+S ::= A
+A ::= !A // AB // (A) // E // P(<params>) // E=V // E:V // E<V // E>V
+A2 ::= |A // ;A
+E ::= <entryname>
+V ::= <value>
+T ::= <type>
+P ::= <additional predicates>
+
+// second try, should be LL(1)
+S ::= AND
+AND ::= OR(;AND)*
+OR ::= NOT(|OR)*
+NOT ::= !ATOM
+ATOM ::= (AND) // E=U // E:V
+E ::= <identifier (string)>
+U ::= <value (string)>
+V ::= <value (string)> // :<value (string)> // V,V
+
+```
+
+Semantics:
+	- precedence: '!' >> '|' >> ';'
+	- A;B means A and B (use & instead?)
+	- parantheses (as in (A)) can be used to overcome default precedence
+	- E just means that entry E exists
+	- P(<params>) means that the predicate is true for the given params
+	  Used for additional (rarely used or custom) predicates.
+	  [not sure if good idea, don't include it for now i guess]
+	- E=V means that entry E exists (with same type as V) and equals V
+	  V can be an array like this a,b,c
+	  When entry is an array and V is just one value, will be true
+	  if the entry has only that one entry.
+	- E:V means that entry E matches value V
+	  Always false if the entry is not of type string or array.
+	  If entry is an array, will be true if one of its values
+	  is exactly value. In this case V could also be a comma-separated
+	  list, meaning that each value in the list must be contained
+	  (exactly) in the array. To signal that a value should just be
+	  matches, prefix it with an :
+
+	  [NOPE, we should not do that for now]
+	  This means "tags::no[dt]e,todo,:a[bB]c" means that tags
+	  must contain:
+	  	- value "todo"
+		- a value that matches "nod[dt]e"
+		- a value that matches "a[bB]c"
 
 ## Patterns
 
