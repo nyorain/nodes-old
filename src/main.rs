@@ -72,6 +72,7 @@ fn ret_main() -> i32 {
         ) (@subcommand estate =>
             (about: "Edit state file (development)")
         ) (@subcommand dev =>
+            (@arg pattern: +required index(1) "The pattern to use")
             (about: "Testing command, you should bever see this")
         )
     ).get_matches();

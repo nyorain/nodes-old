@@ -48,10 +48,11 @@ P ::= <additional predicates>
 
 // second try, should be LL(1)
 S ::= AND
-AND ::= OR(;AND)*
-OR ::= NOT(|OR)*
-NOT ::= !ATOM
-ATOM ::= (AND) // E=U // E:V
+AND ::= OR(;OR)*
+OR ::= NOT(|NOT)*
+NOT ::= !ATOM // ATOM
+ATOM ::= (AND) // E ATOMA
+ATOMA ::= =U // :V
 E ::= <identifier (string)>
 U ::= <value (string)>
 V ::= <value (string)> // :<value (string)> // V,V

@@ -2,8 +2,8 @@ extern crate time;
 extern crate toml;
 extern crate regex;
 
-#[macro_use]
-extern crate clap;
+#[macro_use] extern crate clap;
+#[macro_use] extern crate lazy_static;
 
 pub mod parse;
 pub mod pattern;
@@ -610,13 +610,18 @@ pub fn command_open_state(_: &clap::ArgMatches) -> i32 {
     0
 }
 
-pub fn command_dev(_: &clap::ArgMatches) -> i32 {
+pub fn command_dev(args: &clap::ArgMatches) -> i32 {
+    /*
     let mut tree = pattern::NodePred::new();
     let root = tree.add_root(pattern::PredNode::Not);
     tree.add(root, pattern::PredNode::Pred(pattern::Pred {
         entry: "tags".to_string(),
         pred_type: pattern::PredType::Matches("todo".to_string())
     }));
+    */
+
+    let p = args.value_of("pattern").unwrap();
+    let tree = pattern::parse_pattern(p).unwrap();
 
     let num = 100;
     let lines = 1;
