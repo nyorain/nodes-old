@@ -46,21 +46,26 @@ V ::= <value>
 T ::= <type>
 P ::= <additional predicates>
 
-// second try, should be LL(1)
+// second try, should be LL(1), implement via recursive descent
 S ::= AND
 AND ::= OR(;OR)*
 OR ::= NOT(|NOT)*
 NOT ::= !ATOM // ATOM
 ATOM ::= (AND) // E ATOMA
 ATOMA ::= =U // :V
-E ::= <identifier (string)>
-U ::= <value (string)>
-V ::= <value (string)> // :<value (string)> // V,V
+E ::= ID
+U ::= 
+V ::= VAL // <VAL> // V,V
+
+ID ::= [identifier]
+VAL ::= [value]
 
 ```
 
+TODO: allow equal + match semantics for array?
+
 Semantics:
-	- precedence: '!' >> '|' >> ';'
+	- precedence: '!' >> '|' >> ';' (or the other way around? confused)
 	- A;B means A and B (use & instead?)
 	- parantheses (as in (A)) can be used to overcome default precedence
 	- E just means that entry E exists

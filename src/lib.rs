@@ -4,9 +4,12 @@ extern crate regex;
 
 #[macro_use] extern crate clap;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate nom;
 
 pub mod parse;
 pub mod pattern;
+pub mod pattern2;
+pub mod tree;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -621,7 +624,17 @@ pub fn command_dev(args: &clap::ArgMatches) -> i32 {
     */
 
     let p = args.value_of("pattern").unwrap();
-    let tree = pattern::parse_pattern(p).unwrap();
+    // let tree = pattern::parse_pattern(p).unwrap();
+    let tree = match pattern2::parse_condition(p) {
+        Ok(a) => a,
+        Err(err) => {
+            println!("{}", err);
+            return -1;
+        },
+    };
+
+    pattern2::print_cond(&tree);
+    println!();
 
     let num = 100;
     let lines = 1;
@@ -633,7 +646,10 @@ pub fn command_dev(args: &clap::ArgMatches) -> i32 {
         let nname = meta.get("name").unwrap().as_str().unwrap();
 
         // check predicate
-        if !pattern::node_matches(&meta.toml, &tree) {
+        // if !pattern::node_matches(&meta.toml, &tree) {
+        //     continue;
+        // }
+        if !pattern2::node_matches(&meta.toml, &tree) {
             continue;
         }
 

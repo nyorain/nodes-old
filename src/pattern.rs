@@ -428,28 +428,32 @@ fn parse_or(pattern: &mut Pattern, pred: &mut NodePred, root: usize)
     Some(oroot)
 }
 
-fn parse_and(pattern: &mut Pattern, pred: &mut NodePred, root: usize) 
+fn parse_and_impl(pattern: &mut Pattern, pred: &mut NodePred, node: usize) 
         -> Option<usize> {
-    let aroot = pred.add(root, PredNode::And);
-    if parse_or(pattern, pred, aroot).is_none() {
+    if parse_or(pattern, pred, node).is_none() {
         println!("3");
         return None;
     }
 
     while let Some(n) = pattern.s.chars().next() {
-        if n != ';' {
-            println!("1");
-            return None;
-        }
-        
-        pattern.s = &pattern.s[1..];
-        if parse_or(pattern, pred, aroot).is_none() {
-            println!("2");
-            return None;
+        if n == ';' {
+            pattern.s = &pattern.s[1..];
+            if parse_or(pattern, pred, node).is_none() {
+                println!("2");
+                return None;
+            }
+        } else {
+            break;
         }
     }
 
-    Some(aroot)
+    Some(node)
+}
+
+fn parse_and(pattern: &mut Pattern, pred: &mut NodePred, root: usize) 
+        -> Option<usize> {
+    let aroot = pred.add(root, PredNode::And);
+    parse_and_impl(pattern, pred, aroot)
 }
 
 pub fn parse_pattern(s: &str) -> Option<NodePred> {
@@ -460,11 +464,14 @@ pub fn parse_pattern(s: &str) -> Option<NodePred> {
         return Some(tree);
     }
 
-    let root = tree.add_root(PredNode::And); // TODO: dummy
-    while pattern.s.len() > 0 {
-        if parse_and(&mut pattern, &mut tree, root).is_none() {
-            return None;
-        }
+    let root = tree.add_root(PredNode::And);
+    if parse_and_impl(&mut pattern, &mut tree, root).is_none() {
+        return None;
+    }
+
+    if pattern.s.len() > 0 {
+        println!("Expected ';', got '{}'", pattern.s.chars().next().unwrap());
+        return None;
     }
 
     Some(tree)
