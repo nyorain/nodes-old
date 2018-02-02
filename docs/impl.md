@@ -49,6 +49,27 @@ for storage in config.load_storages() {
 }
 ```
 
+### NextNode idea
+
+```
+pub struct NextNode<'a> {
+    node: Node,
+    id_borrow: &'a mut u64 // mut to make it unique borrowed
+}
+
+impl NextNode {
+    pub fn node(&self) -> &Node {
+        self.node
+    }
+
+    pub fn create(self) -> Node {
+        self.id_borrow += 1;
+        self.node
+    }
+}
+
+```
+
 ## Patterns the second
 
 Start with simple logic.

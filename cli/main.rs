@@ -1,9 +1,5 @@
-extern crate toml;
-extern crate time;
+#[macro_use] extern crate clap;
 extern crate nodes;
-
-#[macro_use]
-extern crate clap;
 
 fn ret_main() -> i32 {
     fn is_uint(v: String) -> Result<(), String> {
@@ -30,8 +26,8 @@ fn ret_main() -> i32 {
                 "Node content")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
-            (@arg id: +required +multiple index(1) 
-                {is_uint} 
+            (@arg id: +required +multiple index(1)
+                {is_uint}
                 "The nodes id. Can also specify multiple nodes")
         ) (@subcommand add =>
             (about: "Creates a new node from an existing file")

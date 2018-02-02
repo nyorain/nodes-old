@@ -7,14 +7,16 @@ authors = ["nyorain"]
 name = "nodes"
 path = "src/lib.rs"
 
-[[bin]]
-name = "nodes"
-path = "src/main.rs"
+# [[bin]]
+# name = "nodes"
+# path = "cli/main.rs"
 
 [dependencies]
 toml = "0.4"
 clap = "2.29"
 time = "0.1"
 regex = "0.2"
+serde = "1.0"
+serde_derive = "1.0"
 lazy_static = "1.0"
 nom = "^3.2"
