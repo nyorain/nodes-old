@@ -2,17 +2,12 @@ use super::toml;
 use super::storage;
 
 use std::io;
-use std::fs;
 use std::env;
 
-use std::io::prelude::*;
 use std::path::PathBuf;
-use std::fs::File;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use toml::ValueImpl;
-
-const WRITE_INITIAL_CONFIG: bool = true;
 
 pub struct StorageConfig {
     default: String,
@@ -20,7 +15,7 @@ pub struct StorageConfig {
 }
 
 pub struct Config {
-    value: toml::Value,
+    pub value: Option<toml::Value>,
     storage: StorageConfig
 }
 
@@ -41,6 +36,7 @@ pub enum ConfigError {
     Read(io::Error),
     Parse(toml::de::Error),
     InvalidStorage,
+    NoStorage,
     NoStorages,
     RedundantStorages,
     InvalidDefaultStorage
@@ -54,22 +50,22 @@ impl Config {
     pub fn load_default() -> Result<Config, ConfigError> {
         // second
         use toml::LoadError;
-        let value = match Value::load(Config::config_path()) {
+        let value = match toml::Value::load(Config::config_path()) {
             Ok(a) => a,
-            LoadError::Open(_) => return Ok(Config::create_default_config()),
-            LoadError::Read(e) => return Err(ConfigError::Read(e)),
-            LoadError::Parse(e) => return Err(ConfigError::Parse(e)),
+            Err(LoadError::Open(_)) => return Ok(Config::default_config()),
+            Err(LoadError::Read(e)) => return Err(ConfigError::Read(e)),
+            Err(LoadError::Parse(e)) => return Err(ConfigError::Parse(e)),
         };
 
-        let storage = match value["storage"] {
-            _ => return Err(ConfigError::NoStorage),
-            Some(a) => match a.try_into::<ParseStorage>() {
+        let storage = match value.get("storage") {
+            None => return Err(ConfigError::NoStorage),
+            Some(a) => match &a.clone().try_into::<ParseStorageConfig>() {
+                &Ok(ref a) => Config::parse_storage_config(a)?,
                 _ => return Err(ConfigError::InvalidStorage),
-                Some(a) => parse_storage_config(a)?,
             },
         };
 
-        Config{val, storage};
+        Ok(Config{value: Some(value), storage})
     }
 
     /// Tries to load the storage with the given name.
@@ -99,23 +95,17 @@ impl Config {
     }
 
     // -- private implementation --
-    fn create_default() -> Config {
-        let pc = ParseStorageConfig {
-            default: Some("default".to_string()),
-            storages: Some(vec!(ParseStorage{
-                name: "default".to_string(),
-                path: Config::default_storage_path(),
-            })),
-        };
-
-        // try to write an initial config
-        if WRITE_INITIAL_CONFIG {
-            Config::write_initial_config(&pc);
+    fn default_config() -> Config {
+        let mut storages = HashMap::new();
+        storages.insert("default".to_string(),
+            Config::default_storage_path());
+        Config {
+            value: None,
+            storage: StorageConfig {
+                default: "default".to_string(),
+                storages,
+            }
         }
-
-        // parse the config
-        Config::parse_config(&pc)
-            .expect("Internal error, parsing initial config")
     }
 
     fn parse_storage_config(config: &ParseStorageConfig)
@@ -126,11 +116,11 @@ impl Config {
         // there has to be at least one storage
         let cstorages = match &config.storages {
             &Some(ref a) => a,
-            &None => return Err(ConfigError::NoStorage),
+            &None => return Err(ConfigError::NoStorages),
         };
 
         if cstorages.is_empty() {
-            return Err(ConfigError::NoStorage);
+            return Err(ConfigError::NoStorages);
         }
 
         for storage in cstorages {
@@ -148,44 +138,14 @@ impl Config {
             }
         }
 
+        // just use the first entry as default if there is none given
         let default = config.default.clone()
             .unwrap_or(cstorages.first().unwrap().name.clone());
         if storages.get(&default).is_none() {
-            return Err(ConfigError::InvalidDefault);
+            return Err(ConfigError::InvalidDefaultStorage);
         }
 
-        Ok(StorageConfig{storages,  default})
-    }
-
-    fn write_initial_config(config: &ParseConfig) {
-        let path = Config::default_config_path();
-        if let Some(parent) = path.parent() {
-            if parent.exists() && !parent.is_dir() {
-                println!("Failed to create config nodes dir, since \
-                    it already exists as something else");
-                return;
-            } else if !parent.exists() {
-                if let Err(e) = fs::create_dir(parent) {
-                    println!("Failed to create config parent dir: {}", e);
-                    return;
-                }
-            } 
-        }
-        
-        let mut f = match File::create(path) {
-            Ok(f) => f,
-            Err(err) => {
-                println!("Failed to create file to write \
-                    initial config: {}", err);
-                return;
-            }
-        };
-
-        if let Err(err) = f.write_all(toml::to_string(&config)
-                .expect("Internal error, deserializing initial config")
-                .as_bytes()) {
-            println!("Failed to write initial config file: {}", err);
-        }
+        Ok(StorageConfig{storages, default})
     }
 
     fn home_dir() -> PathBuf {
@@ -194,7 +154,7 @@ impl Config {
 
     fn config_path() -> PathBuf {
         let mut p = Config::config_folder();
-        p.push("storages");
+        p.push("config");
         p
     }
 
@@ -202,7 +162,7 @@ impl Config {
         let mut p = Config::home_dir();
         p.push(".local");
         p.push("share");
-        p.push("nodes");
+        p.push("nodes-dummy"); // TODO
         p
     }
 }

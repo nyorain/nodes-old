@@ -84,13 +84,19 @@ impl<'b> Storage<'b> {
             .map(|e| e.unwrap().path())
             .filter(|p| !p.is_dir())
             .map(|p| -> Node { 
-                Node::create(
+                Node::new(
                     &self,  
                     p.file_stem().unwrap()
                         .to_str().unwrap()
                         .parse().unwrap()
             )
         }).collect()
+    }
+
+    // TODO: id inc should probably be compile-time checked
+    // should be possible somehow
+    pub fn next_node(&self) -> Node {
+        Node::new(self, self.next_id())
     }
 }
 

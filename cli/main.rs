@@ -1,5 +1,5 @@
 #[macro_use] extern crate clap;
-extern crate nodes;
+mod commands;
 
 fn ret_main() -> i32 {
     fn is_uint(v: String) -> Result<(), String> {
@@ -49,7 +49,7 @@ fn ret_main() -> i32 {
             (@arg sort: -s --sort
                 +case_insensitive
                 default_value("id")
-                possible_values(&nodes::NodeSort::variants())
+                // possible_values(&nodes::NodeSort::variants()) // TODO
                 +takes_value "Order of displayed nodes")
             (@arg reverse: -R --rev !takes_value !required
                 "Reverses the order")
@@ -74,6 +74,7 @@ fn ret_main() -> i32 {
     ).get_matches();
 
     match matches.subcommand() {
+        /*
         ("create", Some(s)) => nodes::command_create(s),
         ("rm", Some(s)) => nodes::command_rm(s),
         ("add", Some(s)) => nodes::command_add(s),
@@ -82,7 +83,10 @@ fn ret_main() -> i32 {
         ("show", Some(s)) => nodes::command_show(s),
         ("estate", Some(s)) => nodes::command_open_state(s),
         ("dev", Some(s)) => nodes::command_dev(s),
-        _ => nodes::command_ls(&clap::ArgMatches::default()) // default
+        */
+        ("create", Some(s)) => commands::create(s),
+        // _ => nodes::command_ls(&clap::ArgMatches::default()) // default
+        _ => { println!("Invalid command, man"); return -1; },
     }
 }
 

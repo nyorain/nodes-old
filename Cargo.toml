@@ -7,9 +7,9 @@ authors = ["nyorain"]
 name = "nodes"
 path = "src/lib.rs"
 
-# [[bin]]
-# name = "nodes"
-# path = "cli/main.rs"
+[[bin]]
+name = "nodes"
+path = "cli/main.rs"
 
 [dependencies]
 toml = "0.4"

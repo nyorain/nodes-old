@@ -17,8 +17,8 @@ pub trait ValueImpl {
     fn new() -> Self;
     fn load<P: AsRef<Path>>(p: P) -> Result<Value, LoadError>;
     fn save<P: AsRef<Path>>(&self, p: P) -> io::Result<()>;
-    fn get(&self, name: &str) -> Option<&Value>;
-    fn get_mut(&mut self, name: &str) -> Option<&mut Value>;
+    fn find(&self, name: &str) -> Option<&Value>;
+    fn find_mut(&mut self, name: &str) -> Option<&mut Value>;
     fn set<V: Into<Value>>(&mut self, name: &str, v: V) -> bool;
 }
 
@@ -51,12 +51,12 @@ impl ValueImpl for Value {
         File::create(p)?.write_all(s.as_bytes())
     }
 
-    fn get(&self, name: &str) -> Option<&Value> {
-        toml_get(self, name)
+    fn find(&self, name: &str) -> Option<&Value> {
+        toml_find(self, name)
     }
 
-    fn get_mut(&mut self, name: &str) -> Option<&mut Value> {
-        toml_get_mut(self, name)
+    fn find_mut(&mut self, name: &str) -> Option<&mut Value> {
+        toml_find_mut(self, name)
     }
 
     fn set<V: Into<Value>>(&mut self, name: &str, v: V) -> bool {
@@ -68,7 +68,7 @@ impl ValueImpl for Value {
 
 /// Returns the value with the given name, if existent.
 /// Can access sub tables, like foo.bar.val
-pub fn toml_get<'a>(v: &'a Value, name: &str)
+pub fn toml_find<'a>(v: &'a Value, name: &str)
         -> Option<&'a Value> {
     let mut next = v;
     for part in name.split('.') {
@@ -84,7 +84,7 @@ pub fn toml_get<'a>(v: &'a Value, name: &str)
     Some(next)
 }
 
-pub fn toml_get_mut<'a>(v: &'a mut Value, name: &str)
+pub fn toml_find_mut<'a>(v: &'a mut Value, name: &str)
         -> Option<&'a mut Value> {
     let mut next = v;
     for part in name.split('.') {

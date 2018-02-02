@@ -9,8 +9,13 @@ pub struct Node<'a, 'b: 'a> {
 }
 
 impl<'a, 'b> Node<'a, 'b> {
-    pub fn create(storage: &'a Storage<'b>, id: u64) -> Node<'a, 'b> {
+    pub fn new(storage: &'a Storage<'b>, id: u64) -> Node<'a, 'b> {
         Node{storage, id}
+    }
+
+    /// Returns the nodes id.
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Returns the parsed meta toml value.
