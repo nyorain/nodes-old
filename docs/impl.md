@@ -4,6 +4,51 @@ The default implementation allows to deal with nodes from the command line.
 It has no graphical user interface but can be connected to external programs
 like an editor, browser or image/video/audio programs.
 
+
+## Library design
+
+Config:
+  - general data, loaded config file
+  - can be used to get storages (or parse node references)
+
+Storage:
+  - One specific node storage
+  - name and path
+  - loaded state file
+  - can be used to receive nodes by id
+  - or otherwise operate on nodes (ls, add, rm etc)
+
+Node:
+  - Information about one node, functionality on that node (cached?)
+  - (only cached, loaded if needed?) meta file
+
+Example program that deletes (if existent) the node 42 from all storages:
+
+```
+let config = node::Config::load(); // loads config from default path
+for storage in config.load_storages() {
+	// #1: using storage rm functionality
+	match storage.remove_by_id(42) {
+		Ok(_) => println!("Node 42 removed from {}", storage),
+		Err(err) => println!("Removing failed from {}: {}", storage, err);
+	}
+
+	// #2: explicity alternative with more error handling
+	let node = match storage.node_by_id(42) {
+		Ok(a) => a,
+		None => {
+			println!("Storage {} has no node 42", storage);
+			continue;
+		},
+	}
+
+	match node.rm() {
+		Ok(_) => println!("Node 42 removed from {}", storage),
+		Err(err) => println!("Failed to remove 42 from {}: {}, storage, err),
+	}
+}
+```
+
 ## Patterns the second
 
 Start with simple logic.

@@ -8,7 +8,6 @@ extern crate regex;
 
 pub mod parse;
 pub mod pattern;
-pub mod pattern2;
 pub mod tree;
 
 use std::fs::File;
@@ -614,18 +613,8 @@ pub fn command_open_state(_: &clap::ArgMatches) -> i32 {
 }
 
 pub fn command_dev(args: &clap::ArgMatches) -> i32 {
-    /*
-    let mut tree = pattern::NodePred::new();
-    let root = tree.add_root(pattern::PredNode::Not);
-    tree.add(root, pattern::PredNode::Pred(pattern::Pred {
-        entry: "tags".to_string(),
-        pred_type: pattern::PredType::Matches("todo".to_string())
-    }));
-    */
-
     let p = args.value_of("pattern").unwrap();
-    // let tree = pattern::parse_pattern(p).unwrap();
-    let tree = match pattern2::parse_condition(p) {
+    let tree = match pattern::parse_condition(p) {
         Ok(a) => a,
         Err(err) => {
             println!("{}", err);
@@ -633,8 +622,8 @@ pub fn command_dev(args: &clap::ArgMatches) -> i32 {
         },
     };
 
-    pattern2::print_cond(&tree);
-    println!();
+    // pattern::print_cond(&tree);
+    // println!();
 
     let num = 100;
     let lines = 1;
@@ -645,14 +634,13 @@ pub fn command_dev(args: &clap::ArgMatches) -> i32 {
         let mut meta = node.meta();
         let nname = meta.get("name").unwrap().as_str().unwrap();
 
-        // check predicate
-        // if !pattern::node_matches(&meta.toml, &tree) {
-        //     continue;
-        // }
-        if !pattern2::node_matches(&meta.toml, &tree) {
+        // check condition
+        if !pattern::node_matches(&meta.toml, &tree) {
             continue;
         }
 
+        // probably better to laod the summary later, only
+        // when we really display the node
         // push node and data
         let summary = node_summary(&node.node_path(), lines);
         let accessed = meta.get("accessed").unwrap().
