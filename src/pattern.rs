@@ -214,23 +214,30 @@ named!(value_string_or_pattern<MatchString>, alt_complete!(
     map!(map_res!(value_pattern, Regex::new), MatchString::Match) |
     map!(map!(value_string, ToString::to_string), MatchString::String)));
 
+// TODO: date or number for greater/smaller
 named!(cond_value<CondType>, switch!(
-    alt_complete!(
+    opt!(alt_complete!(
         tag!(":") | 
         tag!("=") | 
         tag!(">") | 
-        tag!("<") |
-        peek!(take!(1))),
-    // TODO: date or number for greater/smaller
-    b":" => map!(
+        tag!("<"))),
+    Some(b":") => map!(
         separated_nonempty_list_complete!(
             tag!(","), 
             value_string_or_pattern),
         CondType::Matches) |
-    b"=" => map!(map!(value_string, ToString::to_string), CondType::Equals)  |
-    b">" => map!(map!(value_string, ToString::to_string), CondType::Greater) |
-    b"<" => map!(map!(value_string, ToString::to_string), CondType::Smaller) |
-    _ => value!(CondType::Exists)
+    Some(b"=") => map!(
+        map!(value_string, ToString::to_string), 
+        CondType::Equals)  |
+    Some(b">") => map!(
+        map!(value_string, ToString::to_string), 
+        CondType::Greater) |
+    Some(b"<") => map!(
+        map!(value_string, ToString::to_string), 
+        CondType::Smaller) /* |
+    NOTE: enable this to allow exist statements
+    None => value!(CondType::Exists)
+    */
 ));
 named!(expr<CondNode>, alt_complete!(
     delimited!(tag!("("), and, tag!(")")) |
@@ -295,7 +302,7 @@ pub fn parse_condition(pattern: &str) -> Result<CondNode, String> {
                 Ok(value)
             }
         }, IResult::Error(err) => 
-            Err(format!("Failed to parse condition {}", err)),
+            Err(format!("Parse Error: {}", err)),
         IResult::Incomplete(needed) => 
             Err(format!("Incomplete condition. Needed: {:?}", needed)),
     }

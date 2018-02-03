@@ -93,7 +93,7 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         Some(p) => match pattern::parse_condition(p) {
             Ok(a) => Some(a),
             Err(err) => {
-                println!("{}", err);
+                println!("Could not parse condition pattern: {}", err);
                 return -1;
             },
         }
@@ -147,6 +147,46 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     }
 
     0
+}
+
+pub fn edit(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    let id = value_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
+    let node = nodes::Node::new(storage, id);
+    let meta = args.is_present("meta");
+
+    if !node.exists() {
+        println!("Node {} does not exist", id);
+        return -1;
+    }
+
+    if meta {
+        return match spawn_meta(&node) {
+            Ok(v) => v.code().unwrap_or(-2),
+            Err(e) => {
+                println!("Failed to spawn editor: {}", e);
+                return -3;
+            }
+        }
+    }
+
+    let meta = match node.load_meta() {
+        Ok(a) => a,
+        Err(e) => {
+            println!("Failed to load meta for node {}: {:?}", node.id(), e);
+            return -4;
+        },
+    };
+
+    let nodetype = meta.get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("text");
+    match spawn(&node, "edit", nodetype) {
+        Ok(v) => v.code().unwrap_or(-5),
+        Err(e) => {
+            println!("Failed to spawn editor: {}", e);
+            return -6;
+        }
+    }
 }
 
 fn program_for_entry(config: &toml::Value, entry: &str) 
@@ -309,6 +349,19 @@ fn spawn(node: &nodes::Node, cat: &str, ntype: &str)
     process::Command::new(&prog[0]).args(prog[1..].iter()).status()
 }
 
+fn spawn_meta(node: &nodes::Node)
+        -> io::Result<process::ExitStatus> {
+    let config = node.storage().config();
+    let mut prog = build_program(&config, "edit", "meta");
+    let path = node.meta_path();
+
+    if !patch_program(&node, &mut prog) {
+        prog.push(path.to_str().unwrap().to_string());
+    }
+
+    process::Command::new(&prog[0]).args(prog[1..].iter()).status()
+}
+
 fn list_node(node: &nodes::Node, lines: u64) {
     let summary = node_summary(&node.node_path(), lines);
     let name = node.load_meta().unwrap()
@@ -369,7 +422,7 @@ fn read_node(path: &PathBuf, mut lines: u64, dot: bool) -> String {
     let f = BufReader::new(&f);
     let mut ret = String::new();
 
-    for line in f.lines().take(lines as usize) {
+    for line in f.lines() {
         if lines == 0 {
             if dot {
                 ret.push_str("[...]");

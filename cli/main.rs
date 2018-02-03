@@ -69,11 +69,8 @@ fn ret_main() -> i32 {
             (alias: "e")
             (@arg id: +required index(1) {is_uint} "Id of node to edit")
             (@arg meta: -m --meta "Edit the meta file instead")
-        ) (@subcommand estate =>
-            (about: "Edit state file (development)")
-        ) (@subcommand dev =>
-            (@arg pattern: +required index(1) "The pattern to use")
-            (about: "Testing command, you should bever see this")
+        ) (@subcommand config =>
+            (about: "Edit config file")
         )
     ).get_matches();
 
@@ -85,14 +82,13 @@ fn ret_main() -> i32 {
 
     match matches.subcommand() {
         /*
-        ("create", Some(s)) => nodes::command_create(s),
-        ("rm", Some(s)) => nodes::command_rm(s),
-        ("add", Some(s)) => nodes::command_add(s),
-        ("edit", Some(s)) => nodes::command_edit(s),
-        ("show", Some(s)) => nodes::command_show(s),
-        ("estate", Some(s)) => nodes::command_open_state(s),
-        ("dev", Some(s)) => nodes::command_dev(s),
+        ("create", Some(s)) => commands::create(&mut storage, s),
+        ("rm", Some(s)) => commands::rm(&mut storage, s),
+        ("add", Some(s)) => commands::add(s),
+        ("show", Some(s)) => commands::show(s),
+        ("config", Some(s)) => commands::config(s),
         */
+        ("edit", Some(s)) => commands::edit(&mut storage, s),
         ("create", Some(s)) => commands::create(&mut storage, s),
         ("ls", Some(s)) => commands::ls(&mut storage, s),
         _ => commands::ls(&mut storage, &clap::ArgMatches::default())

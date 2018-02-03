@@ -11,7 +11,6 @@ use std::fs::File;
 #[derive(Deserialize, Serialize)]
 pub struct StorageState {
     last_id: u64,
-    last_accessed: u64,
 }
 
 pub struct Storage<'a> {
