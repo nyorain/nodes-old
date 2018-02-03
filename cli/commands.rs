@@ -200,6 +200,19 @@ pub fn config(config: &nodes::Config, _args: &clap::ArgMatches) -> i32 {
     }
 }
 
+pub fn rm(storage: &nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    let ids = values_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
+    let mut res = 0;
+    for id in ids {
+        if let Err(e) = nodes::Node::new(storage, id).remove() {
+            println!("Failed to remove node {}: {}", id, e);
+            res += 1;
+        }
+    }
+
+    res
+}
+
 fn program_for_entry(config: &toml::Value, entry: &str) 
         -> Option<Vec<String>> {
     match config.find(&entry) {

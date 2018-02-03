@@ -2,6 +2,8 @@ use super::storage::Storage;
 use super::toml;
 
 use std::path::PathBuf;
+use std::fs;
+use std::io;
 
 pub struct Node<'a, 'b: 'a> {
     storage: &'a Storage<'b>,
@@ -61,6 +63,12 @@ impl<'a, 'b> Node<'a, 'b> {
     /// Returns the associates storage
     pub fn storage(&self) -> &Storage<'b> {
         self.storage
+    }
+
+    /// Removes this node.
+    pub fn remove(&self) -> io::Result<()> {
+        fs::remove_file(self.node_path())?;
+        fs::remove_file(self.meta_path())
     }
 }
 
