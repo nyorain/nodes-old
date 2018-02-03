@@ -4,6 +4,164 @@ The default implementation allows to deal with nodes from the command line.
 It has no graphical user interface but can be connected to external programs
 like an editor, browser or image/video/audio programs.
 
+The notes below are partly outdated and were just used as first reference
+or sandbox before implementing something.
+
+## Node id languge
+
+So nodes in one storage can be referred to uniquely by an id.
+But there should a syntax that makes it clear the node is meant,
+and not just a number (to e.g. allow editor extensions to follow
+the link). And one should also be able to reference nodes in
+another storage.
+
+Ideas:
+
+```
+nodes@42 # reference node 42 in this/default storage
+@42  # same, but as shortcut. Optionally supported since it might
+     # also be used in different ways
+
+nodes:public@42 # refer to node 42 in storage public
+public@42  # same, shortcut
+```
+
+This might actually be not so intuitive since we don't refer
+to 'something @ 42', and rather to 'node 42 @ some storage',
+or 'node 42 in the nodes systems'.
+So maybe rather use something like this:
+
+```
+42@nodes
+42@
+
+42@public
+42@public.nodes
+42@public:nodes
+42@nodes.public
+42@nodes:public
+```
+
+Having to write @nodes everytime refering to a node sucks.
+And both shortcuts '42@' and '@42' as well as '42@public' for
+explicit-storage references might look to close to an email/are
+too short to be a good reference.
+
+```
+nodes:42
+n:42
+nodes://42
+nodes://42@public
+nodes://public.42
+
+nodes.42
+nodes.public.42
+```
+
+The name nodes is probably to general to be established as a reference
+name like this. Maybe rename the project while we can?
+nodes + thoughts = thoudes?
+fragments + nodes = frodes?
+note + thought = thote?
+yooi, like simple/plain?
+
+... naaah
+
+So the at sign is probably the best idea.
+We could use '42@nodes/public' as the full form.
+It is distuingusable from an email address (by the last '/'), not too
+short and the meaning should be obvious.
+We can then introduce shorthands like '42@nodes/' for using the
+default/this storage, and also '42@/public', simply not using
+'nodes'. Combining both shorthands would produce '42@/', meaning
+the node 42 in this/default storage.
+
+Idea: distinguis this/default storage. As in paths, this could
+be signaled by '.' and the default storage as the root.
+'753@.' 753 in this storage (maybe allow '753@' as further shortened ref?)
+  Would be '753@nodes.' explicitly.
+  But the '.' could be confusing and making it more like an email.
+  Rather use ':'?
+'234@/' 234 in the default storage
+  Or maybe don't even allow to refer to the default storage?
+  It could be changed after all.
+
+# Final result #1
+
+```
+32@nodes/project 	# node 32 in storage 'project'
+92@nodes/			# node 92 in the same storage
+429@/				# shortcut for node 429 in same storage
+253@/public			# shortcut for node 253 in storage 'public'
+```
+
+Or use ':' instead of '/'?
+
+The same storage obviously only makes sense when used in a node.
+If used somewhere else, it's up to the tool/processor how to handle it.
+Possible alternative are: 
+  - just ignore it, don't parse it as nodes reference
+  - parse it as nodes reference but produce an error
+  - use the default storage
+
+### Syntax
+
+REF ::= id@(nodes|n)?:(storage)?
+id ::= <unsigned number>
+storage ::= <identifier, [^@]+>
+
+Parsers may remove the ? behin (nodes|n) for a more conservative
+matching. Regex (rust syntax):
+
+```
+([0-9]+)@(?:nodes|n)?:([^@]+)?
+```
+
+- The first match group is the id number.
+- The second match group is the storage qualifier.
+  Empty means the 'this' storage.
+
+## Node information language
+
+Really simple language allowing to associate information with nodes.
+Something like `name="Some name";tags+"some tag";tags+"another";`?
+Allows to set own metadata identifiers.
+
+Simple start: 
+  - if the first line a node starts with '[nodes]', will parse the
+    rest of line
+	- also allow '# [nodes]' or '// [nodes]'?
+	- in this case we could also extend it to mulitple lines
+	-   --> later on, not now
+  - also strips the first line from the node
+  - all occurences of ';' are replaced with a newline
+  - will parse the result as plain toml
+  	- introduce things like that '+' syntax later on if needed
+
+This means a node like this:
+
+```
+[nodes] name='some random node name'; tags=['tag1', 'tag2']; color='red'
+This here is a random node.
+It will have the name and tags and additional metadata as specified above.
+Those will override values specified in command line.
+```
+
+Some ideas/changes:
+
+  - parse all lines from the beginning that have the tag
+  - [nodes] as tag might suck a bit, let's rather choose "nodes:"
+    to also keep it a bit like the vim in-file settings syntax
+	- not so sure about this
+  - if there is a newline after the last 'nodes' line, it will also
+    be removed from the real node
+
+```
+nodes: name = 'some name'
+nodes: tags = ['tag1', 'tag2']
+
+Some node
+```
 
 ## Library design
 
