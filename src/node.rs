@@ -57,5 +57,10 @@ impl<'a, 'b> Node<'a, 'b> {
             false
         }
     }
+
+    /// Returns the associates storage
+    pub fn storage(&self) -> &Storage<'b> {
+        self.storage
+    }
 }
 

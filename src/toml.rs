@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 
+#[derive(Debug)]
 pub enum LoadError {
     Open(io::Error),
     Read(io::Error),

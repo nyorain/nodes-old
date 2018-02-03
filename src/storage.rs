@@ -16,6 +16,7 @@ pub struct StorageState {
 
 pub struct Storage<'a> {
     config: &'a Config,
+    name: String,
     path: PathBuf,
     state: StorageState
 }
@@ -28,12 +29,12 @@ pub enum LoadStorageError {
     Parse(toml::de::Error)
 }
 
-impl<'b> Storage<'b> {
+impl<'a> Storage<'a> {
     /// Loads the storage for the given stoage path.
     /// Note that the passed path has to be the base path of the storage,
     /// not the storage file itself.
-    pub fn load(config: &Config, path: PathBuf) 
-            -> Result<Storage, LoadStorageError> {
+    pub fn load(config: &'a Config, name: &str, path: PathBuf) 
+            -> Result<Storage<'a>, LoadStorageError> {
         let mut spath = path.clone();
         spath.push("storage");
         let mut f = match File::open(spath) {
@@ -51,7 +52,7 @@ impl<'b> Storage<'b> {
             Err(e) => return Err(LoadStorageError::Parse(e)),
         };
 
-        Ok(Storage { config, path, state })
+        Ok(Storage { config, name: name.to_string(), path, state })
     }
 
     /// Returns the next id that would be used for a node.
@@ -75,6 +76,16 @@ impl<'b> Storage<'b> {
         let mut path = self.path.clone();
         path.push("nodes");
         path
+    }
+
+    /// Returns the associated config
+    pub fn config(&self) -> &Config {
+        self.config
+    }
+
+    /// Returns the name of this storage
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     // TODO: error handling

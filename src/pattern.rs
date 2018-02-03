@@ -1,12 +1,13 @@
-extern crate toml;
+extern crate regex;
 
-use parse;
-use tree;
+use super::toml;
+use super::tree;
+use super::toml::ValueImpl;
 
 use std::str;
 use std::str::FromStr;
 use std::string::ToString;
-use regex::Regex;
+use self::regex::Regex;
 use nom::IResult;
 
 pub enum MatchString {
@@ -92,7 +93,7 @@ pub fn matches(a: &toml::Value, b: &Vec<MatchString>) -> bool {
 }
 
 pub fn check_cond(val: &toml::Value, cond: &Cond) -> bool {
-    let v = parse::toml_get(val, &cond.entry);
+    let v = val.find(&cond.entry);
     if v.is_none() {
         return false;
     }

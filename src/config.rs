@@ -15,7 +15,7 @@ pub struct StorageConfig {
 }
 
 pub struct Config {
-    pub value: Option<toml::Value>,
+    value: Option<toml::Value>,
     storage: StorageConfig
 }
 
@@ -79,7 +79,7 @@ impl Config {
             None => return Err(storage::LoadStorageError::InvalidName),
         };
         
-        storage::Storage::load(self, path)
+        storage::Storage::load(self, name, path)
     }
 
     pub fn load_default_storage(&self)
@@ -92,6 +92,11 @@ impl Config {
         p.push(".config");
         p.push("nodes");
         p
+    }
+
+    /// Returns the parsed config file as value
+    pub fn value(&self) -> &Option<toml::Value> {
+        &self.value
     }
 
     // -- private implementation --
