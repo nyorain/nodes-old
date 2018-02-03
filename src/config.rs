@@ -94,6 +94,13 @@ impl Config {
         p
     }
 
+    pub fn config_path() -> PathBuf {
+        let mut p = Config::config_folder();
+        p.push("config");
+        p
+    }
+
+
     /// Returns the parsed config file as value
     pub fn value(&self) -> &Option<toml::Value> {
         &self.value
@@ -155,12 +162,6 @@ impl Config {
 
     fn home_dir() -> PathBuf {
         env::home_dir().expect("Could not retrieve home directory")
-    }
-
-    fn config_path() -> PathBuf {
-        let mut p = Config::config_folder();
-        p.push("config");
-        p
     }
 
     fn default_storage_path() -> PathBuf {

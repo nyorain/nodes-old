@@ -48,7 +48,7 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             };
 
             if !res.success() {
-                println!("Editor returned with exit code {}", res);
+                println!("Editor returned with error code {}", res);
                 return -4;
             }
 
@@ -186,6 +186,17 @@ pub fn edit(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             println!("Failed to spawn editor: {}", e);
             return -6;
         }
+    }
+}
+
+pub fn config(config: &nodes::Config, _args: &clap::ArgMatches) -> i32 {
+    let mut prog = build_program(&config, "edit", "config");
+    prog.push(nodes::Config::config_path().to_str().unwrap().to_string());
+    match process::Command::new(&prog[0]).args(prog[1..].iter()).status() {
+        Err(e) => {
+            println!("Failed to spawn editor: {}", e);
+            -1
+        }, Ok(s) => s.code().unwrap_or(-2)
     }
 }
 
@@ -442,4 +453,3 @@ fn read_node(path: &PathBuf, mut lines: u64, dot: bool) -> String {
 
     ret
 }
-

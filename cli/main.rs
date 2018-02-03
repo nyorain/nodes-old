@@ -86,8 +86,8 @@ fn ret_main() -> i32 {
         ("rm", Some(s)) => commands::rm(&mut storage, s),
         ("add", Some(s)) => commands::add(s),
         ("show", Some(s)) => commands::show(s),
-        ("config", Some(s)) => commands::config(s),
         */
+        ("config", Some(s)) => commands::config(&config, s),
         ("edit", Some(s)) => commands::edit(&mut storage, s),
         ("create", Some(s)) => commands::create(&mut storage, s),
         ("ls", Some(s)) => commands::ls(&mut storage, s),
