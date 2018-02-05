@@ -72,28 +72,36 @@ fn ret_main() -> i32 {
             (alias: "e")
             (@arg id: +required index(1) {is_uint} "Id of node to edit")
             (@arg meta: -m --meta "Edit the meta file instead")
+        ) (@subcommand ref =>
+           (@arg ref: +required index(1) "The node reference")
+           (@arg from: index(2) 
+                "Origin node path. Needed for 'this' storage")
+           (about: "Resolves a node reference to a path")
         ) (@subcommand config =>
             (about: "Edit config file")
         )
     ).get_matches();
 
     let config = nodes::Config::load_default().unwrap();
-    let mut storage = if matches.is_present("local") {
+    let storage = if matches.is_present("local") {
         config.load_local_storage()
     } else {
         match matches.value_of("storage") {
             Some(name) => config.load_storage(name),
             None => config.load_default_storage(),
         }
-    }.unwrap();
+    };
 
+    // TODO: add, show
     match matches.subcommand() {
-        ("rm", Some(s)) => commands::rm(&mut storage, s),
+        ("rm", Some(s)) => commands::rm(&mut storage.unwrap(), s),
         ("config", Some(s)) => commands::config(&config, s),
-        ("edit", Some(s)) => commands::edit(&mut storage, s),
-        ("create", Some(s)) => commands::create(&mut storage, s),
-        ("ls", Some(s)) => commands::ls(&mut storage, s),
-        _ => commands::ls(&mut storage, &clap::ArgMatches::default())
+        ("edit", Some(s)) => commands::edit(&mut storage.unwrap(), s),
+        ("create", Some(s)) => commands::create(&mut storage.unwrap(), s),
+        ("ls", Some(s)) => commands::ls(&mut storage.unwrap(), s),
+        ("ref", Some(s)) => commands::ref_path(&config, s),
+        _ => commands::ls(&mut storage.unwrap(), 
+                          &clap::ArgMatches::default())
     }
 }
 

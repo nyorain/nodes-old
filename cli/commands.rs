@@ -213,6 +213,54 @@ pub fn rm(storage: &nodes::Storage, args: &clap::ArgMatches) -> i32 {
     res
 }
 
+pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
+    let node_ref = args.value_of("ref").unwrap();
+    let NodeRef {id, storage} = match parse_node_ref(node_ref) {
+        Some(a) => a,
+        None => {
+            println!("Invalid node reference: {}", node_ref);
+            return -1;
+        }, 
+    };
+
+    let storage = match storage {
+        Some(a) => match config.load_storage(a) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Failed to load storage {}: {:?}", a, e);
+                return -4;
+            },
+        }, None => {
+            let from = match args.value_of("from") {
+                Some(a) => a,
+                None => {
+                    println!("'From' node is required to resolve \
+                             'this' storage qualifier");
+                    return -2;
+                }
+            };
+            
+            match storage_for_path(&config, PathBuf::from(&from)) {
+                Some(a) => a,
+                None => {
+                    println!("Could not get storage for {}", from);
+                    return -3;
+                },
+            }
+        },
+    };
+
+    let node = nodes::Node::new(&storage, id);
+    if !node.exists() {
+        println!("Node {} does not exist", node_ref);
+        return -5;
+    }
+
+    println!("{}", node.node_path().to_string_lossy());
+    0
+}
+
+// private util
 fn program_for_entry(config: &toml::Value, entry: &str) 
         -> Option<Vec<String>> {
     match config.find(&entry) {
@@ -465,4 +513,45 @@ fn read_node(path: &PathBuf, mut lines: u64, dot: bool) -> String {
     }
 
     ret
+}
+
+struct NodeRef<'a> {
+    id: u64,
+    storage: Option<&'a str>
+}
+
+fn parse_node_ref<'a>(node_ref: &'a str) -> Option<NodeRef<'a>> {
+    lazy_static! {
+        static ref REGEX: regex::Regex = 
+            regex::Regex::new("([0-9]+)@(?:nodes|n)?:([^@]+)?").unwrap();
+    }
+
+    match REGEX.captures(&node_ref) {
+        None => None,
+        Some(capture) => {
+            let storage = capture.get(2).map(|v| v.as_str());
+            let id = capture.get(1)
+                .and_then(|v| v.as_str().parse::<u64>().ok());
+            let id = match id {
+                Some(a) => a,
+                None => {
+                    println!("Could not parse node ref id");
+                    return None;
+                },
+            };
+
+            Some(NodeRef{id, storage})
+        }
+    }
+}
+
+fn storage_for_path(config: &nodes::Config, mut path: PathBuf) 
+        -> Option<nodes::Storage> {
+    // TODO: try path/parent itself, error handling, no clone
+    assert!(path.pop());
+    assert!(path.pop());
+
+    let cpy = path.clone();
+    let name = cpy.file_name().unwrap().to_str().unwrap();
+    nodes::Storage::load(config, name, path).ok()
 }
