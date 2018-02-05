@@ -11,6 +11,7 @@ use toml::ValueImpl;
 
 pub struct StorageConfig {
     default: String,
+    local_search_paths: Vec<String>,
     storages: HashMap<String, PathBuf>
 }
 
@@ -28,6 +29,7 @@ struct ParseStorage {
 #[derive(Deserialize, Serialize)]
 struct ParseStorageConfig {
     default: Option<String>,
+    local_search_paths: Option<Vec<String>>,
     storages: Option<Vec<ParseStorage>>,
 }
 
@@ -82,9 +84,47 @@ impl Config {
         storage::Storage::load(self, name, path)
     }
 
+    /// Loads the default storage.
     pub fn load_default_storage(&self)
             -> Result<storage::Storage, storage::LoadStorageError> {
         self.load_storage(&self.storage.default)
+    }
+
+    /// Attempts to load a local storage.
+    /// Will search from cwd upwards and check storage.local-search-paths
+    /// from config in every directory.
+    /// Will not recover from error, i.e. only attempt to load the first
+    /// found node storage.
+    /// Returns LoadStorageError::NotFound if none is found.
+    pub fn load_local_storage(&self)
+            -> Result<storage::Storage, storage::LoadStorageError> {
+        let mut cwd = env::current_dir().expect("Failed to get current dir");
+        'outer: loop {
+            let mut npath = PathBuf::from(cwd.clone());
+            for spath in &self.storage.local_search_paths {
+                npath.push(spath);
+                if !npath.is_dir() {
+                    println!("{:?} isn't a dir", npath);
+                    continue;
+                }
+
+                npath.push("storage");
+                if !npath.is_file() {
+                    println!("{:?} isn't a file", npath);
+                    continue;
+                }
+
+                npath.pop(); // pop "storage" again, we need the storage root
+                let name = cwd.file_name()
+                    .map(|v| v.to_str().expect("Invalid path"))
+                    .unwrap_or("root").to_string();
+                return storage::Storage::load(self, &name, npath)
+            }
+
+            if !cwd.pop() {
+                return Err(storage::LoadStorageError::NotFound);
+            }
+        }
     }
 
     pub fn config_folder() -> PathBuf {
@@ -115,6 +155,7 @@ impl Config {
             value: None,
             storage: StorageConfig {
                 default: "default".to_string(),
+                local_search_paths: Config::default_local_search_paths(),
                 storages,
             }
         }
@@ -157,7 +198,10 @@ impl Config {
             return Err(ConfigError::InvalidDefaultStorage);
         }
 
-        Ok(StorageConfig{storages, default})
+        // local_search_paths
+        let local_search_paths = config.local_search_paths.as_ref()
+            .unwrap_or(&Config::default_local_search_paths()).clone();
+        Ok(StorageConfig{storages, local_search_paths, default})
     }
 
     fn home_dir() -> PathBuf {
@@ -170,5 +214,9 @@ impl Config {
         p.push("share");
         p.push("nodes-dummy"); // TODO
         p
+    }
+
+    fn default_local_search_paths() -> Vec<String> {
+        vec!(String::from(".nodes"))
     }
 }

@@ -23,6 +23,7 @@ pub struct Storage<'a> {
 #[derive(Debug)]
 pub enum LoadStorageError {
     InvalidName,
+    NotFound,
     Open(io::Error),
     Read(io::Error),
     Parse(toml::de::Error)

@@ -20,6 +20,9 @@ fn ret_main() -> i32 {
         (author: "nyorain [at gmail dot com]")
         (about: "Manages your node system from the command line")
         (@arg storage: -s --storage +takes_value "The storage to use")
+        (@arg local: -l --local 
+            conflicts_with("storage")
+            "Search for a local node storage in current directory")
         (@subcommand create =>
             (about: "Creates a new node")
             (alias: "c")
@@ -75,10 +78,14 @@ fn ret_main() -> i32 {
     ).get_matches();
 
     let config = nodes::Config::load_default().unwrap();
-    let mut storage = match matches.value_of("storage") {
-        Some(name) => config.load_storage(name).unwrap(),
-        None => config.load_default_storage().unwrap(),
-    };
+    let mut storage = if matches.is_present("local") {
+        config.load_local_storage()
+    } else {
+        match matches.value_of("storage") {
+            Some(name) => config.load_storage(name),
+            None => config.load_default_storage(),
+        }
+    }.unwrap();
 
     match matches.subcommand() {
         ("rm", Some(s)) => commands::rm(&mut storage, s),
