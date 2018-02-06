@@ -28,6 +28,12 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         let node_type = args.value_of("type").unwrap_or(DEFAULT_NODE_TYPE);
         let node = storage.next_node();
 
+        let mut meta = toml::Value::new();
+        if let Some(val) = args.value_of("meta") {
+            let mut val = val.replace(";", "\n");
+            parse_meta(&val, &mut meta);
+        }
+
         if let Some(content) = args.value_of("content") {
             if content.is_empty() {
                 println!("No content given");
@@ -58,12 +64,47 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 println!("No node was created");
                 return -5;
             }
-        }
 
-        let mut meta = toml::Value::new();
-        if let Some(val) = args.value_of("meta") {
-            let mut val = val.replace(";", "\n");
-            parse_meta(&val, &mut meta);
+            // TODO: error handling; maybe only try this for textual
+            // nodes in the first place? How to differentiate?
+            
+            // check if we can read the first line, in which case
+            // we will check (and strip) it for metadata annotations
+            let mut data = Vec::new();
+            match File::open(node.node_path()) {
+                Ok(file) => {
+                    {
+                        let mut reader = BufReader::new(&file);
+                        let mut lines = reader.lines();
+                        if let Some(Ok(mut line)) = lines.next() {
+                            if line.starts_with("nodes: ") {
+                                line.drain(0..7);
+                                line = line.replace(";", "\n");
+
+                                // load full file data, remove first line
+                                let mut reader = BufReader::new(&file);
+                                reader.seek(io::SeekFrom::Start(0)).unwrap();
+                                reader.read_to_end(&mut data).unwrap();
+                                let idx = data.iter()
+                                    .position(|&v| v == '\n' as u8);
+                                if let Some(first) = idx {
+                                    data.drain(0..(first+1));
+                                }
+                            }
+                        } else {
+                            println!("Could not parse first line");
+                        }
+                    }
+                }, Err(e) => {
+                    println!("Failed to open created node: {}", e);
+                },
+            }
+
+            // write trimmed data
+            if !data.is_empty() {
+                let mut f = File::create(node.node_path()).unwrap();
+                f.write_all(&data).unwrap();
+            }
         }
 
         let now = time::now().rfc3339().to_string();
@@ -587,7 +628,7 @@ fn parse_meta(s: &str, val: &mut toml::Value) -> bool {
     let parsed = match s.parse::<toml::Value>() {
         Ok(a) => a,
         Err(e) => {
-            println!("Failed to parse given meta toml: {:?}", e);
+            println!("Failed to parse given meta toml '{}': {:?}", s, e);
             return false;
         }
     };
