@@ -15,6 +15,7 @@ use std::process;
 
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -60,14 +61,15 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         }
 
         let mut meta = toml::Value::new();
+        if let Some(val) = args.value_of("meta") {
+            let mut val = val.replace(";", "\n");
+            parse_meta(&val, &mut meta);
+        }
+
         let now = time::now().rfc3339().to_string();
 
         meta.set("created", toml::Value::from(now.clone()));
         meta.set("type", toml::Value::from(node_type.clone()));
-
-        if let Some(name) = args.value_of("name") {
-            meta.set("name", toml::Value::from(name.clone()));
-        }
 
         if let Err(err) = meta.save(node.meta_path()) {
             println!("Failed to save node meta file: {}", err);
@@ -76,12 +78,7 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             return -6;
         }
 
-        // output information
-        if let Some(name) = args.value_of("name") {
-            println!("Created Node {}: {}", node.id(), name);
-        } else {
-            println!("Created Node {}", node.id());
-        }
+        println!("Created Node {}", node.id());
     }
 
     storage.use_id();
@@ -99,10 +96,6 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         }
         None => None
     };
-
-    // debug the built tree
-    // pattern::print_cond(&tree);
-    // println!();
 
     let num = value_t!(args, "num", usize).unwrap_or(10);
     let mut lines = value_t!(args, "lines", u64).unwrap_or(1);
@@ -257,6 +250,39 @@ pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
     }
 
     println!("{}", node.node_path().to_string_lossy());
+    0
+}
+
+pub fn add(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    {
+        let node_type = DEFAULT_NODE_TYPE;
+        let node = storage.next_node();
+
+        // copy file
+        let fname = args.value_of("file").unwrap();
+        let path = Path::new(fname);
+        if let Err(e) = fs::copy(path, node.node_path()) {
+            println!("Could not copy file to node {}: {}", fname, e);
+            return -1;
+        }
+
+        let mut meta = toml::Value::new();
+        let now = time::now().rfc3339().to_string();
+        meta.set("created", toml::Value::from(now.clone()));
+        meta.set("type", toml::Value::from(node_type.clone()));
+
+        meta.save(node.meta_path()).expect("Failed to save node meta file");
+        if let Err(err) = meta.save(node.meta_path()) {
+            println!("Failed to save node meta file: {}", err);
+            fs::remove_file(node.node_path())
+                .expect("Failed to removed node file");
+            return -2;
+        }
+
+        println!("Created Node {}", node.id());
+    }
+
+    storage.use_id();
     0
 }
 
@@ -554,4 +580,34 @@ fn storage_for_path(config: &nodes::Config, mut path: PathBuf)
     let cpy = path.clone();
     let name = cpy.file_name().unwrap().to_str().unwrap();
     nodes::Storage::load(config, name, path).ok()
+}
+
+// TODO: return error/msg
+fn parse_meta(s: &str, val: &mut toml::Value) -> bool {
+    let parsed = match s.parse::<toml::Value>() {
+        Ok(a) => a,
+        Err(e) => {
+            println!("Failed to parse given meta toml: {:?}", e);
+            return false;
+        }
+    };
+
+    // append it
+    append_toml(val, &parsed);
+    true
+}
+
+fn append_toml(dst: &mut toml::Value, src: &toml::Value) {
+    match src {
+        &toml::Value::Table(ref t) => {
+            for pair in t {
+                if let Some(val) = dst.find_mut(pair.0) {
+                    append_toml(val, pair.1);
+                    continue;
+                }
+
+                dst.set(pair.0, pair.1.clone());
+            }
+        }, _ => *dst = src.clone(),
+    }
 }

@@ -26,12 +26,13 @@ fn ret_main() -> i32 {
         (@subcommand create =>
             (about: "Creates a new node")
             (alias: "c")
-            (@arg name: !required index(1) "The name, id by default")
+            (@arg meta: !required index(1) "Associate metadata with this node")
             (@arg tags: -t --tag +takes_value !required ... +use_delimiter
                 "Tag the node")
-            (@arg type: --type +takes_value !required "Node type")
+            (@arg type: --type +takes_value !required 
+                "Type of node to create, will open matching editor")
             (@arg content: -c --content +takes_value !required
-                "Node content")
+                "Write this content into the node instead of open an editor")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
             (@arg id: +required +multiple index(1)
@@ -62,11 +63,11 @@ fn ret_main() -> i32 {
                 "Reverses the order")
             (@arg reverse_list: -r --revlist !takes_value !required
                 "Reverses the display order")
-        ) (@subcommand show =>
-            (about: "Shows a node")
-            (alias: "s")
-            (@arg id: +required index(1) {is_uint} "Id of node to show")
-            (@arg meta: -m --meta "Shows the meta file instead")
+        // ) (@subcommand show =>
+        //     (about: "Shows a node")
+        //     (alias: "s")
+        //     (@arg id: +required index(1) {is_uint} "Id of node to show")
+        //     (@arg meta: -m --meta "Shows the meta file instead")
         ) (@subcommand edit =>
             (about: "Edits a node")
             (alias: "e")
@@ -98,9 +99,13 @@ fn ret_main() -> i32 {
         ("config", Some(s)) => commands::config(&config, s),
         ("edit", Some(s)) => commands::edit(&mut storage.unwrap(), s),
         ("create", Some(s)) => commands::create(&mut storage.unwrap(), s),
+        ("add", Some(s)) => commands::add(&mut storage.unwrap(), s),
         ("ls", Some(s)) => commands::ls(&mut storage.unwrap(), s),
         ("ref", Some(s)) => commands::ref_path(&config, s),
-        _ => commands::ls(&mut storage.unwrap(), 
+        (_, Some(_)) => {
+            println!("Currently not supported");
+            1
+        } _ => commands::ls(&mut storage.unwrap(), 
                           &clap::ArgMatches::default())
     }
 }
