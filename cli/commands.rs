@@ -80,8 +80,8 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                             if line.starts_with("nodes: ") {
                                 line.drain(0..7);
                                 line = line.replace(";", "\n");
+                                parse_meta(&line, &mut meta);
 
-                                // load full file data, remove first line
                                 let mut reader = BufReader::new(&file);
                                 reader.seek(io::SeekFrom::Start(0)).unwrap();
                                 reader.read_to_end(&mut data).unwrap();
@@ -100,7 +100,6 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 },
             }
 
-            // write trimmed data
             if !data.is_empty() {
                 let mut f = File::create(node.node_path()).unwrap();
                 f.write_all(&data).unwrap();

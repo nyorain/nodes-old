@@ -7,7 +7,129 @@ like an editor, browser or image/video/audio programs.
 The notes below are partly outdated and were just used as first reference
 or sandbox before implementing something.
 
-## Node id languge
+## Motivation doc (add to spec?)
+
+#### What are the advantages over simply using files?
+
+You can associate metadata with nodes and organize them in different
+ways that a hierachial tree-like directory. Nodes are not meant
+to replace files, they are meant as a more dynamic and flexible way
+than files but still be open (in the sense of not having to use
+a proprietary api) and scalable.
+
+#### What's wrong with existing tools
+
+To name a few: Google Keep, Simplenote, Evernote, emacs org mode or 
+some vendor and platform specific note keeping app.
+
+Nothing is 'wrong' those exisiting tools but none of them felt really
+'right' to me on the long run either. Most of them implement things
+like node editing from scratch (and then lock you to it) or otherwise
+lock you to a specific environment (like they only work online, support
+only text nodes or lock you to an editor). Especially on modern unix systems
+we really can do better than this by just implementing one thing and do it
+well.
+Let the users choose what editor they want to use; in which way
+(or if at all) they want to synchronize/upload their personal thoughts
+and notes and additionally provide a completely open system as
+specification that everyone can write tools, programs and extensions for; 
+use and extend as they see fit.
+
+Integrate one node storage with git, another one with nextcloud,
+and another one for your personal stuff not at all because
+you don't want it on the internet. 
+Add a public node storage that you integrate with a static generator and 
+something like github pages to make it a website that everyone can view.
+Edit your text nodes in vim or emacs or sublime or atom or nano or even edit 
+different file types in different of those editors (like use nano for simple
+text nodes but open larger project nodes in whatever else your
+favorite editor is).
+Watch image nodes with your favorite image viewer, add a shortcut to your 
+system that creates a new node from the current clipboard contents, 
+write a daemon that reads reminder metadata from your nodes and sends you 
+notifications. Edit, create, view and search for nodes from the command
+line, in a graphical or even a web ui. Always free to use just
+whatever tools someone already wrote for it.
+Everyting open, fully customizable, extensible and modular.
+
+Organize your nodes as collections, as binary trees, as a diary, album or
+in a general graph layout. Implement a program that finds the shortest paths
+between two nodes. A graphical visualizer for your node system.
+If you need to, just use plain old directory-like organization patterns. 
+Write node templates, custom node types (like a story, a memory, 
+an idea, a todo item) and link between them or build together collections.
+Or just them to occasionally store something that's on your mind with
+an easy-to-use high level graphical user interface and don't care about 
+anything else.
+
+I hope this answers your question.
+
+_Disclaimer_: don't go out look for all of this functionality right now please.
+It's a vision; a goal and something that is clearly possible but also
+a lot of work. But since everything is open and there are already some
+tools you can obviously implement yourself whatever you need of this.
+
+## Alternative reference pattern (idea, WIP)
+
+regex: `([0-9]+)@(?:nodes|n)?:([a-zA-Z0-9](?:[^@]+[a-zA-Z0-9]))?`
+
+Changes storage part, that needs that the storage qualifier begins
+and ends with a alphanumerical character (it is still allowed
+to have only 1 character and it still optional).
+
+This allows to avoid pulling sentence chars into the storage
+qualifier that are not expected (and wanted) there.
+If we e.g. have a node with the content:
+
+```
+This node does not link to node 2@:.
+And it can go wrong in many similar places (like this 3@:public).
+```
+
+Then the storage qualifier of the first node will be "." which
+was probably not expected meant. The second example won't 'work'
+either, here the storage qualifier (with old, permissive regex)
+would be "public)." which does not seem to be meant.
+Both examples work with the new regex, but we have a condition
+for storage names now.
+
+## Reference pattern (spec draft)
+
+Using uniqueness of storage names and uniqueness of node ids, every node
+accessible on a system can be referenced in a unique manner.
+To allow to detect such references uniformly, there is a pattern that
+can be used:
+
+```
+regex:         ([0-9]+)@(?:nodes|n)?:([a-zA-Z0-9](?:[^@]+[a-zA-Z0-9]))?
+                   ^                    ^
+                   |                    |
+                   |                    |
+match groups:   node id        storage name (optional)
+```
+
+- The first match group is the nodes id (unsigned number)
+- The second match group is the storage qualifier.
+  It is optional and empty means the 'this' storage, i.e. the same 
+  storage as the node with this reference (so this makes only sense 
+  when used in a node).
+
+Some examples are:
+
+- `42@:` refer to node 42 in the same storage as the referencing node
+- `42@nodes:` or `42@n:` same as above, but more explicit as nodes reference
+- `74@:public` refer to node 74 in the public storage
+- `74@nodes:public` or `74@n:public` same, but again more explicit
+
+The motivation behind introducing such a pattern/syntax is that such
+references can be identified (programs/users may additionally choose
+to just perform the explicity reference type, again just with the
+full "nodes" qualifier or with the "n" shortcut) and handled.
+The pattern was chosen in a way that it should not often appear
+by nature (e.g. "@:" is not allowed in email addresses) and so
+nodes could be scanned by this simple regex for references.
+
+## Node id languge (old, ideas)
 
 So nodes in one storage can be referred to uniquely by an id.
 But there should a syntax that makes it clear the node is meant,
