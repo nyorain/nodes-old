@@ -114,7 +114,8 @@ pub fn check_cond(val: &toml::Value, cond: &Cond) -> bool {
 pub fn node_matches(val: &toml::Value, cond: &CondNode) -> bool {
     match &cond.data {
         &CondNodeType::Not => {
-            !node_matches(&val, cond.children.first().unwrap())
+            !node_matches(&val, cond.children.first()
+                .expect("Invalid CondNode: 'not' needs a child"))
         }, &CondNodeType::And => {
             for child in &cond.children {
                 if !node_matches(&val, &child) {
@@ -141,7 +142,8 @@ pub fn print_cond(cond: &CondNode) {
     match &cond.data {
         &CondNodeType::Not => {
             print!("!(");
-            print_cond(cond.children.first().unwrap());
+            print_cond(cond.children.first()
+                .expect("Invalid CondNode: 'not' needs a child"));
             print!(")");
         }, &CondNodeType::And => {
             print!("(");

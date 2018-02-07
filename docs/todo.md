@@ -3,11 +3,11 @@
 ## Stuff until v0.1:
 
 - [ ] cleanup implementation (error handling, no hacks, modular!)
-- [ ] write a matching first specification
+- [x] write a matching first specification
 
 ## Specific todos:
 
-- [ ] config: ls default count
+- [x] config: ls default count
 - [ ] config (and ls command): which data to output/summary (+format)?
 
 ## Later, def. after v0.1:
