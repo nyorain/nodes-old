@@ -22,6 +22,7 @@ use std::io::prelude::*;
 const DEFAULT_NODE_TYPE: &str = "text";
 const NAME_SIZE: usize = 20;
 const SUMMARY_SIZE: usize = 40;
+const LS_COUNT_DEFAULT: usize = 30;
 
 pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     {
@@ -137,7 +138,15 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         None => None
     };
 
-    let num = value_t!(args, "num", usize).unwrap_or(10);
+    let num = if args.is_present("num") {
+        value_t!(args, "num", usize).unwrap_or_else(|e| e.exit())
+    } else {
+        storage.config().value().as_ref()
+            .and_then(|c| c.find("ls_count"))
+            .and_then(|v| v.as_integer()).map(|v| v as usize)
+            .unwrap_or(LS_COUNT_DEFAULT)
+    };
+
     let mut lines = value_t!(args, "lines", u64).unwrap_or(1);
     if args.is_present("full") {
         lines = 10000; // TODO, we can do better than this!
