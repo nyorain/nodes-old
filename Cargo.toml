@@ -1,8 +1,15 @@
 [package]
 name = "nodes"
 version = "0.1.0"
-license = "Boost"
+license = "BSL-1.0"
 authors = ["nyorain"]
+
+exclude = [".nodes/**", "docs/**"]
+description = "Library and cli of a simple node/though keeping system"
+repository = "https://github.com/nyorain/nodes"
+readme = "README.md"
+keywords = ["notes", "docs", "cli", "nodes"]
+categories = ["command-line-interface"]
 
 [lib]
 name = "nodes"
