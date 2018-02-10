@@ -20,7 +20,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 const DEFAULT_NODE_TYPE: &str = "text";
-const SUMMARY_SIZE: usize = 40;
+const SUMMARY_SIZE: usize = 70;
 const LS_COUNT_DEFAULT: usize = 30;
 
 pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
@@ -142,7 +142,7 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
     nodes.truncate(num);
 
-    if args.is_present("reverse_list") {
+    if !args.is_present("reverse_list") {
         nodes.reverse();
     }
 
