@@ -41,8 +41,9 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 return -1;
             }
 
-            let mut f = File::create(node.node_path()).unwrap();
-            if let Err(err) = f.write_all(content.as_bytes()) {
+            let res = File::create(node.node_path())
+                .and_then(|mut f| f.write_all(content.as_bytes()));
+            if let Err(err) = res {
                 println!("Failed to write node: {}", err);
                 return -2
             }
@@ -66,45 +67,7 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 return -5;
             }
 
-            // TODO: error handling; maybe only try this for textual
-            // nodes in the first place? How to differentiate?
-            
-            // check if we can read the first line, in which case
-            // we will check (and strip) it for metadata annotations
-            let mut data = Vec::new();
-            match File::open(node.node_path()) {
-                Ok(file) => {
-                    {
-                        let mut reader = BufReader::new(&file);
-                        let mut lines = reader.lines();
-                        if let Some(Ok(mut line)) = lines.next() {
-                            if line.starts_with("nodes: ") {
-                                line.drain(0..7);
-                                line = line.replace(";", "\n");
-                                parse_meta(&line, &mut meta);
-
-                                let mut reader = BufReader::new(&file);
-                                reader.seek(io::SeekFrom::Start(0)).unwrap();
-                                reader.read_to_end(&mut data).unwrap();
-                                let idx = data.iter()
-                                    .position(|&v| v == '\n' as u8);
-                                if let Some(first) = idx {
-                                    data.drain(0..(first+1));
-                                }
-                            }
-                        } else {
-                            println!("Could not parse first line");
-                        }
-                    }
-                }, Err(e) => {
-                    println!("Failed to open created node: {}", e);
-                },
-            }
-
-            if !data.is_empty() {
-                let mut f = File::create(node.node_path()).unwrap();
-                f.write_all(&data).unwrap();
-            }
+            strip_node_meta(&node, &mut meta);
         }
 
         let now = time::now().rfc3339().to_string();
@@ -116,7 +79,7 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             println!("Failed to save node meta file: {}", err);
             fs::remove_file(node.node_path())
                 .expect("Failed to removed node file");
-            return -6;
+            return -7;
         }
 
         println!("Created Node {}", node.id());
@@ -256,7 +219,8 @@ pub fn rm(storage: &nodes::Storage, args: &clap::ArgMatches) -> i32 {
 }
 
 pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
-    let node_ref = args.value_of("ref").unwrap();
+    let node_ref = args.value_of("ref")
+        .expect("No ref argument given, although it is required");
     let NodeRef {id, storage} = match parse_node_ref(node_ref) {
         Some(a) => a,
         None => {
@@ -308,7 +272,8 @@ pub fn add(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         let node = storage.next_node();
 
         // copy file
-        let fname = args.value_of("file").unwrap();
+        let fname = args.value_of("file").
+            expect("No file argument given, although it is required");
         let path = Path::new(fname);
         if let Err(e) = fs::copy(path, node.node_path()) {
             println!("Could not copy file to node {}: {}", fname, e);
@@ -365,7 +330,12 @@ fn program_for_entry(config: &toml::Value, entry: &str)
 
 fn fallback_program(cat: &str) -> Vec<String> {
     if cat == "create" {
-        vec!(env::var("EDITOR").unwrap())
+        let editor = match env::var("EDITOR") {
+            Ok(a) => a,
+            Err(_) => env::var("VISUAL").unwrap_or("vim".to_string()),
+        };
+
+        vec!(editor)
     } else {
         vec!("xdg-open".to_string())
     }
@@ -419,10 +389,10 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
                     node_path|\
                     storage_name|\
                     storage_path|\
-                    (meta\\{([^\\}]+)\\}))").unwrap();
+                    (meta\\{([^\\}]+)\\}))").expect("Internal regex error");
     }
 
-    // TODO: error handling (some unwraps are or, some are not...)
+    // TODO: error handling (some unwraps are ok, some are not...)
     // TODO: performance: don't load content multiple times, cache meta
     let mut used = false;
     let mut cpy = String::new();
@@ -598,7 +568,8 @@ struct NodeRef<'a> {
 fn parse_node_ref<'a>(node_ref: &'a str) -> Option<NodeRef<'a>> {
     lazy_static! {
         static ref REGEX: regex::Regex = 
-            regex::Regex::new("([0-9]+)@(?:nodes|n)?:([^@]+)?").unwrap();
+            regex::Regex::new("([0-9]+)@(?:nodes|n)?:([^@]+)?")
+                .expect("Internal invalid regex");
     }
 
     match REGEX.captures(&node_ref) {
@@ -658,5 +629,54 @@ fn append_toml(dst: &mut toml::Value, src: &toml::Value) {
                 dst.set(pair.0, pair.1.clone());
             }
         }, _ => *dst = src.clone(),
+    }
+}
+
+fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
+    // TODO: error handling; maybe only try this for textual
+    // nodes in the first place? How to differentiate?
+    
+    // check if we can read the first line, in which case
+    // we will check (and strip) it for metadata annotations
+    let mut data = Vec::new();
+
+    {
+        let file = match File::open(node.node_path()) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Failed to open created node: {}", e);
+                return;
+            },
+        };
+
+        let reader = BufReader::new(&file);
+        let mut lines = reader.lines();
+        if let Some(Ok(mut line)) = lines.next() {
+            if line.starts_with("nodes: ") {
+                line.drain(0..7);
+                line = line.replace(";", "\n");
+                parse_meta(&line, meta);
+
+                let mut reader = BufReader::new(&file);
+                reader.seek(io::SeekFrom::Start(0)).unwrap();
+                reader.read_to_end(&mut data).unwrap();
+                let idx = data.iter().position(|&v| v == '\n' as u8);
+                if let Some(first) = idx {
+                    data.drain(0..(first+1));
+                }
+            }
+        } else {
+            println!("Could not parse first line");
+            return;
+        }
+    }
+
+    if !data.is_empty() {
+        let res = File::create(node.node_path())
+            .and_then(|mut f| f.write_all(&data));
+        if let Err(err) = res {
+            println!("Failed to write stripped node file: {}", err);
+            return;
+        }
     }
 }

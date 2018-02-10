@@ -192,6 +192,7 @@ impl Config {
         }
 
         // just use the first entry as default if there is none given
+        // we can unwrap since we already know that storages is not empty
         let default = config.default.clone()
             .unwrap_or(cstorages.first().unwrap().name.clone());
         if storages.get(&default).is_none() {

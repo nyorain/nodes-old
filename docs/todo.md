@@ -2,7 +2,7 @@
 
 ## Stuff until v0.1:
 
-- [ ] cleanup implementation (error handling, no hacks, modular!)
+- [x] cleanup implementation (error handling, no hacks, modular!)
 - [x] write a matching first specification
 
 ## Specific todos:
@@ -62,6 +62,9 @@
   - [x] something like "-- nodes-tags: tag1 tag2 tag3" at the end of the file
 - [x] allow fast, inline node creation (like "nodes o -m 'some text'")
 - [ ] automatically parse node type (image? url?)
+- [ ] make things modular by simply piping multiple node commands into each
+      other?
+  - [ ] like `nodes find tags:remove | nodes rm`
 
 Just a dummy node, the real todo list resides in the node repo for now.
 With multiple storage spaces, this could change (and with collections/links

@@ -88,20 +88,45 @@ impl<'a> Storage<'a> {
         &self.name
     }
 
-    // TODO: error handling
     /// Returns a list of all nodes in this storage.
     pub fn nodes(&self) -> Vec<Node> {
-        fs::read_dir(self.nodes_path()).unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| !p.is_dir())
-            .map(|p| -> Node { 
-                Node::new(
-                    &self,  
-                    p.file_stem().unwrap()
-                        .to_str().unwrap()
-                        .parse().unwrap()
-            )
-        }).collect()
+        let dir = match fs::read_dir(self.nodes_path()) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Failed to read nodes dir of storage {}: {}",
+                    self.name, e);
+                return Vec::new();
+            },
+        };
+        
+        let mut nodes = Vec::new();
+        for entry in dir {
+            let entry = match entry {
+                Ok(a) => a,
+                Err(e) => {
+                    println!("Invalid nodes entry in storage {}: {}", 
+                        self.name, e);
+                    continue;
+                },
+            };
+
+            let entry = entry.path();
+            if entry.is_dir() {
+                continue;
+            }
+
+            let id = entry.file_stem()
+                .and_then(|f| f.to_str())
+                .and_then(|f| f.parse::<u64>().ok());
+
+            match id {
+                Some(id) => nodes.push(Node::new(&self, id)),
+                None => println!("Invalid node file in {}: {}", 
+                    self.name, entry.to_str().unwrap_or("<invalid>")),
+            }
+        }
+
+        nodes
     }
 
     // TODO: id inc should probably be compile-time checked

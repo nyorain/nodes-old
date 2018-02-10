@@ -83,29 +83,40 @@ fn ret_main() -> i32 {
         )
     ).get_matches();
 
-    let config = nodes::Config::load_default().unwrap();
-    let storage = if matches.is_present("local") {
+    // load config & match storage-independent commands
+    let config = nodes::Config::load_default().expect("Error loading config");
+    match matches.subcommand() {
+        ("config", Some(s)) => return commands::config(&config, s),
+        ("ref", Some(s)) => return commands::ref_path(&config, s),
+        _ => {},
+    }
+
+    // storage-dependent commands, load a storage
+    let mut storage = match if matches.is_present("local") {
         config.load_local_storage()
     } else {
         match matches.value_of("storage") {
             Some(name) => config.load_storage(name),
             None => config.load_default_storage(),
         }
+    } {
+        Ok(a) => a,
+        Err(e) => {
+            println!("Error fetching storage: {:?}", e);
+            return 1;
+        },
     };
 
-    // TODO: add, show
     match matches.subcommand() {
-        ("rm", Some(s)) => commands::rm(&mut storage.unwrap(), s),
-        ("config", Some(s)) => commands::config(&config, s),
-        ("edit", Some(s)) => commands::edit(&mut storage.unwrap(), s),
-        ("create", Some(s)) => commands::create(&mut storage.unwrap(), s),
-        ("add", Some(s)) => commands::add(&mut storage.unwrap(), s),
-        ("ls", Some(s)) => commands::ls(&mut storage.unwrap(), s),
-        ("ref", Some(s)) => commands::ref_path(&config, s),
+        ("rm", Some(s)) => commands::rm(&mut storage, s),
+        ("edit", Some(s)) => commands::edit(&mut storage, s),
+        ("create", Some(s)) => commands::create(&mut storage, s),
+        ("add", Some(s)) => commands::add(&mut storage, s),
+        ("ls", Some(s)) => commands::ls(&mut storage, s),
         (_, Some(_)) => {
             println!("Currently not supported");
-            1
-        } _ => commands::ls(&mut storage.unwrap(), 
+            return 2;
+        } _ => commands::ls(&mut storage, 
                           &clap::ArgMatches::default())
     }
 }

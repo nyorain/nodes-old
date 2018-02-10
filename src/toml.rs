@@ -48,7 +48,10 @@ impl ValueImpl for Value {
     }
 
     fn save<P: AsRef<Path>>(&self, p: P) -> io::Result<()> {
-        let s = toml::ser::to_string_pretty(&self).unwrap();
+        // this should not fail since we cannot represent invalid
+        // toml values with Value
+        let s = toml::ser::to_string_pretty(&self)
+            .expect("Failed to transform toml to string");
         File::create(p)?.write_all(s.as_bytes())
     }
 
