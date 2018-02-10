@@ -4,15 +4,14 @@
 
 - [x] cleanup implementation (error handling, no hacks, modular!)
 - [x] write a matching first specification
-- [ ] fix 'nodes ref' (especially error handling)
+- [x] fix 'nodes ref' (especially error handling)
+- [ ] Write readme, add license, fix docs (remove old stuff)
 
 ## Specific todos:
 
 - [x] config: ls default count
 - [ ] config (and ls command): which data to output/summary (+format)?
-
-## Later, def. after v0.1:
-
+- [ ] functionality (in library, but also as command) to init/create storage
 - [ ] first try of file type parsing
 - [ ] command to modify meta data (without using 'edit --meta')
 - [ ] shortcuts for meta fields (like n for name or t for tags. c for content?)

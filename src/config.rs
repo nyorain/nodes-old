@@ -3,7 +3,10 @@ use super::storage;
 
 use std::io;
 use std::env;
+use std::fs;
 
+use std::fs::File;
+use std::io::prelude::*;
 use std::path::PathBuf;
 use std::collections::HashSet;
 use std::collections::HashMap;
@@ -149,8 +152,31 @@ impl Config {
     // -- private implementation --
     fn default_config() -> Config {
         let mut storages = HashMap::new();
-        storages.insert("default".to_string(),
-            Config::default_storage_path());
+
+        // we make sure that the default storage exists
+        // when running nodes for the first time this assures that
+        // it can already be used
+        let mut storage = Config::default_storage_path();
+        if !storage.is_dir() {
+            fs::create_dir_all(&storage)
+                .expect("Failed to create default storage path");
+
+            storage.push("storage");
+            File::create(&storage)
+                .and_then(|mut f| f.write_all(b"last_id = 0"))
+                .expect("Unable to create default storage file");
+            storage.pop();
+
+            storage.push("nodes");
+            fs::create_dir_all(&storage).unwrap();
+            storage.pop();
+
+            storage.push("meta");
+            fs::create_dir_all(&storage).unwrap();
+            storage.pop();
+        }
+        
+        storages.insert("default".to_string(), storage);
         Config {
             value: None,
             storage: StorageConfig {
@@ -213,7 +239,7 @@ impl Config {
         let mut p = Config::home_dir();
         p.push(".local");
         p.push("share");
-        p.push("nodes-dummy"); // TODO
+        p.push("nodes-test"); // TODO
         p
     }
 
