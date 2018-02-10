@@ -4,6 +4,7 @@
 
 - [x] cleanup implementation (error handling, no hacks, modular!)
 - [x] write a matching first specification
+- [ ] fix 'nodes ref' (especially error handling)
 
 ## Specific todos:
 

@@ -20,7 +20,6 @@ use std::fs::File;
 use std::io::prelude::*;
 
 const DEFAULT_NODE_TYPE: &str = "text";
-const NAME_SIZE: usize = 20;
 const SUMMARY_SIZE: usize = 40;
 const LS_COUNT_DEFAULT: usize = 30;
 
@@ -196,7 +195,7 @@ pub fn edit(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
 pub fn config(config: &nodes::Config, _args: &clap::ArgMatches) -> i32 {
     let mut prog = build_program(&config, "edit", "config");
-    prog.push(nodes::Config::config_path().to_str().unwrap().to_string());
+    prog.push(nodes::Config::config_path().to_string_lossy().into_owned());
     match process::Command::new(&prog[0]).args(prog[1..].iter()).status() {
         Err(e) => {
             println!("Failed to spawn editor: {}", e);
@@ -392,8 +391,9 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
                     (meta\\{([^\\}]+)\\}))").expect("Internal regex error");
     }
 
-    // TODO: error handling (some unwraps are ok, some are not...)
-    // TODO: performance: don't load content multiple times, cache meta
+    // TODO: signal error on return? don't just continue
+    // TODO: performance: don't load content multiple times, cache meta?
+    
     let mut used = false;
     let mut cpy = String::new();
     'args: for arg in prog.iter_mut() {
@@ -402,19 +402,44 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
             cpy.push_str(&arg);
             if let Some(capture) = REGEX.captures(&arg) {
                 used = true;
-                let first = capture.get(1).unwrap();
+                let first = capture.get(1)
+                    .expect("Internal regex capture error");
                 cpy.drain(first.start()..first.end());
                 match first.as_str() {
                     "full_content" => {
                         let mut s = String::new();
-                        File::open(node.node_path()).unwrap()
-                            .read_to_string(&mut s).unwrap();
+                        let res = File::open(node.node_path())
+                            .and_then(|mut f| f.read_to_string(&mut s));
+                        if let Err(e) = res {
+                            println!("Failed to read '{}': {}", node.id(), e);
+                            continue;
+                        }
+
                         cpy.insert_str(first.start(), &s);
                     }, "first_line" => {
-                        let f = File::open(node.node_path()).unwrap();
-                        let mut reader = BufReader::new(&f);
-                        cpy.insert_str(first.start(), 
-                            &reader.lines().next().unwrap().unwrap());
+                        let f = match File::open(node.node_path()) {
+                            Ok(a) => a,
+                            Err(e) => {
+                                println!("Failed to open '{}': {}", 
+                                        node.id(), e);
+                                continue;
+                            },
+                        };
+
+                        let mut reader = BufReader::new(f);
+                        let line = match reader.lines().next() {
+                            Some(Ok(a)) => a,
+                            Some(Err(e)) => {
+                                println!("Invalid first line of {}: {}",
+                                    node.id(), e);
+                                continue;
+                            }, None => {
+                                println!("Node {} is empty", node.id());
+                                continue;
+                            },
+                        };
+
+                        cpy.insert_str(first.start(), &line);
                     }, "id" => {
                         cpy.insert_str(first.start(), &node.id().to_string());
                     }, "node_path" => {
@@ -430,10 +455,9 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
                         if first.as_str().starts_with("meta") {
                             let entry = capture.get(2).unwrap().as_str();
                             let meta = node.load_meta().unwrap();
-                            let s = meta.find(entry)
-                                .and_then(|e| { 
-                                    toml::ser::to_string_pretty(&e).ok()
-                                }).unwrap_or("".to_string());
+                            let s = meta.find(entry).and_then(|e|  
+                                    toml::ser::to_string_pretty(&e).ok())
+                                .unwrap_or("".to_string());
                             cpy.insert_str(first.start(), &s);
                         } else {
                             // Invalid alternative
@@ -481,16 +505,12 @@ fn spawn_meta(node: &nodes::Node)
 
 fn list_node(node: &nodes::Node, lines: u64) {
     let summary = node_summary(&node.node_path(), lines);
-    let name = node.load_meta().unwrap()
-        .find("name").and_then(|v| v.as_str())
-        .unwrap_or("").to_string();
 
     if lines == 1 {
-        println!("{}:\t{:<w2$}    {:<w3$}",
-            node.id(), short_string(&name, NAME_SIZE), summary,
-            w2 = NAME_SIZE, w3 = SUMMARY_SIZE);
+        println!("{}:\t{:<w$}",
+            node.id(), summary, w = SUMMARY_SIZE);
     } else {
-        println!("{}:\t{}", node.id(), name);
+        println!("{}:", node.id());
         for line in summary.lines() {
             println!("\t{}", line);
         }
@@ -591,15 +611,53 @@ fn parse_node_ref<'a>(node_ref: &'a str) -> Option<NodeRef<'a>> {
     }
 }
 
+// TODO: this function should probably check if the storage is
+// known (by the given config), and if so set its name correctly
+
+/// Returns the the storage at the given path.
+/// Basically tests path and it's parent directory for a 
+/// storage file. If it exists (and is valid) returns its name.
+/// The name of storage will be set to the folder it is in.
 fn storage_for_path(config: &nodes::Config, mut path: PathBuf) 
         -> Option<nodes::Storage> {
-    // TODO: try path/parent itself, error handling, no clone
-    assert!(path.pop());
-    assert!(path.pop());
+    if path.is_relative() {
+        path = match env::current_dir() {
+            Ok(mut a) => {a.push(path); a},
+            Err(_) => {
+                println!("Could not retrieve current_dir");
+                return None;
+            }
+        };
+    }
 
-    let cpy = path.clone();
-    let name = cpy.file_name().unwrap().to_str().unwrap();
-    nodes::Storage::load(config, name, path).ok()
+    // fn load_storage(config: &nodes::Cofnig, path: PathBuf)
+    let load_storage = |path: PathBuf| -> Option<nodes::Storage> {
+        let mut cpy = path.clone();
+        cpy.pop();
+        cpy.pop();
+        let name = match cpy.file_name() {
+            Some(a) => a.to_str().unwrap(),
+            None => return None,
+        };
+
+        return nodes::Storage::load(config, name, path).ok();
+    };
+
+    if path.is_file() {
+        path.pop();
+    } 
+
+    if path.is_dir() {
+        path.push("storage");
+        if path.is_file() {
+            path.pop();
+            return load_storage(path);
+        }
+        path.pop();
+    }
+
+    path.pop();
+    load_storage(path)
 }
 
 // TODO: return error/msg
