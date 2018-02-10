@@ -10,7 +10,7 @@ is implemented.
 
 ## Show me something
 
-[![asciicast](https://asciinema.org/a/a/pQBFdQlmw3my9eGasyQHf5Eit.png)](https://asciinema.org/a/pQBFdQlmw3my9eGasyQHf5Eit)
+[![asciicast](https://asciinema.org/a/pQBFdQlmw3my9eGasyQHf5Eit.png)](https://asciinema.org/a/pQBFdQlmw3my9eGasyQHf5Eit)
 
 The example only shows very simple examples. You could now list nodes
 for more complex patterns like `(tags:idea|tags:<[Tt]odo>);!color=red`
