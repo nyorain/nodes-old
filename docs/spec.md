@@ -1,51 +1,73 @@
-# NODES
+# Nodes specification v0.1
 
-directories:
+This is the first alpha specification of the nodes system.
+It has to be seen as highly unstable as many aspects of the specification
+are likely to change in the next versions.
 
-baseDir: base directory. Default on unix: ~/.local/share/nodes
-nodesDir: stores all nodes. Default: $baseDir/nodes
-metaDir: stores all metadata. Default $baseDir/.meta
-cacheDir: temporary caches for faster processing. Default $baseDir/.cache
-configDir: stores user-accesible config files and plugins.
-  Default on unix: ~/.config/nodes
+## Overview and motivation
 
-$nodesDir holds all nodes files organized in some way.
-The default is unordered, e.g. all nodes are top-level files.
+The goal is a simple yet extensible system for personal notes, thoughts,
+snippets, collections and general files -- the idea of a node.
+Instead of just writing a tool, the system is described by a small
+spefication since one of the goals of nodes is to make the nodes
+accessible in many ways, on many platforms and in which way ever one likes
+to do.
 
-$metaDir can be used by everyone to store metadata either specific
-to single nodes or for a node program.
-It will e.g. be used for node connections, tags, colors.
-Also holds internal config values and information.
+## Central configuration
 
-$cacheDir can be used by plugins for temporary data.
-Deleting $cacheDir should be possible at any time, with the only
-impact being worse performance (for the next usage(s)).
-It will usally be used to store shared cache data like additional
-tag lookup tables.
+The central nodes config file is placed at $HOME/.config/nodes/config,
+where $HOME is the users home path.
+It has the toml file format and per standard the following fields:
 
-# A node
+- "storage.default": Name of the default storage (string)
+- "storage.storages": Array of tables that describe the availble storages
+  - ".name": The name of a storage (string)
+  - ".path": The file path of the storage (string)
+
+Extensions/tools can add/load additional config values to/from this file.
+By default (e.g. when the config file does not exist), the initial
+default node storage is used (also set as default storage), located
+at $HOME/.local/share/nodes.
+See the storages section for more information about storages.
+
+## Storages
+
+A node storage is an abstract location that contains nodes.
+On a system, every storage has a unique name.
+Usually these storages are filepaths but extensions/tools may
+provide custom storage types (like e.g. cloud-based storages).
+
+A storage always has the following layout:
+
+. The storage root folder
+|
+|-- storage
+|-- nodes/
+|-- meta/
+
+The storage file contains information about the storage.
+It has the toml file format and the key "last_id" is always
+set to the last unique id node used for a node (type integer).
+When a new node is created, the value must be increased.
+
+The nodes/ folder contains the node files. Every file has just
+the name of the nodes' id.
+
+The meta/ folder contains the metadat files associated with the nodes. 
+Every file has just the name of the nodes' id and the toml file format.
+Programs/extensions/users are free to add any values to these files.
+
+## Node
 
 A node is a piece of information.
 Nothing else of its shape is specified, its definition and usage
 is mainly up to the user.
+Per specification there are only two things every node has: 
 
-There are a few things every node has:
+- an unique id (unique per storage)
+- a set of associated metadata
 
-- An id: unique for every node (even after deletion).
-  Internally just uses a counter that is increased with every new node.
-  Cannot be changed over the lifetime of the node.
-- A name: node representation to the user.
-  Default unspecified, up to program and config (may be empty or id).
-  Not unique in any way.
-- Metadata: which metadata is stored depends on the configuration.
-  Everyone can add own metadata.
-  All metadata can be changed. Examples/possibilities are:
-	- time of creation
-	- type/filetype
-	- tags
-	- color
-	- incoming/outgoing links
-	- history
-	- status (like archived, trashed, additional meta-tags etc)
-	- summary (short description, content)
-  Which of these meta information belong to a plugin?
+The unique id is used as reference to the node while the metadata
+can be used freely by the user.
+Depending on the tool and platform, the id might or might not be exposed
+to the end user.
