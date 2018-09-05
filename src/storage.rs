@@ -33,7 +33,7 @@ impl<'a> Storage<'a> {
     /// Loads the storage for the given stoage path.
     /// Note that the passed path has to be the base path of the storage,
     /// not the storage file itself.
-    pub fn load(config: &'a Config, name: &str, path: PathBuf) 
+    pub fn load(config: &'a Config, name: &str, path: PathBuf)
             -> Result<Storage<'a>, LoadStorageError> {
         let mut spath = path.clone();
         spath.push("storage");
@@ -67,12 +67,12 @@ impl<'a> Storage<'a> {
     }
 
     /// Returns the path of this storage
-    pub fn path(&self) -> &PathBuf { 
+    pub fn path(&self) -> &PathBuf {
         &self.path
     }
 
     /// Returns the nodes path
-    pub fn nodes_path(&self) -> PathBuf { 
+    pub fn nodes_path(&self) -> PathBuf {
         let mut path = self.path.clone();
         path.push("nodes");
         path
@@ -90,21 +90,36 @@ impl<'a> Storage<'a> {
 
     /// Returns a list of all nodes in this storage.
     pub fn nodes(&self) -> Vec<Node> {
-        let dir = match fs::read_dir(self.nodes_path()) {
+        self.list_nodes(&self.nodes_path(), false)
+    }
+
+    /// Returns a list of all nodes in this storage.
+    pub fn archived(&self) -> Vec<Node> {
+        let mut path = self.nodes_path();
+        path.push("archive");
+        self.list_nodes(&path, true)
+    }
+
+    // TODO: id inc should probably be compile-time checked
+    // should be possible somehow
+    pub fn next_node(&self) -> Node {
+        Node::new(self, self.next_id())
+    }
+
+    fn list_nodes(&self, path: &PathBuf, archived: bool) -> Vec<Node> {
+        let dir = match fs::read_dir(path) {
             Ok(a) => a,
-            Err(e) => {
-                println!("Failed to read nodes dir of storage {}: {}",
-                    self.name, e);
+            Err(_) => {
                 return Vec::new();
             },
         };
-        
+
         let mut nodes = Vec::new();
         for entry in dir {
             let entry = match entry {
                 Ok(a) => a,
                 Err(e) => {
-                    println!("Invalid nodes entry in storage {}: {}", 
+                    println!("Invalid nodes entry in storage {}: {}",
                         self.name, e);
                     continue;
                 },
@@ -120,19 +135,13 @@ impl<'a> Storage<'a> {
                 .and_then(|f| f.parse::<u64>().ok());
 
             match id {
-                Some(id) => nodes.push(Node::new(&self, id)),
-                None => println!("Invalid node file in {}: {}", 
+                Some(id) => nodes.push(Node::new_archived(&self, id, archived)),
+                None => println!("Invalid node file in {}: {}",
                     self.name, entry.to_str().unwrap_or("<invalid>")),
             }
         }
 
         nodes
-    }
-
-    // TODO: id inc should probably be compile-time checked
-    // should be possible somehow
-    pub fn next_node(&self) -> Node {
-        Node::new(self, self.next_id())
     }
 }
 
@@ -149,7 +158,7 @@ impl<'a> Drop for Storage<'a> {
                 return;
             }
         };
-        
+
         if let Err(err) = f.write_all(toml::to_string(&self.state)
                 .expect("Internal error, deserializing state file")
                 .as_bytes()) {

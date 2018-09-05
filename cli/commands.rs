@@ -100,6 +100,7 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         None => None
     };
 
+    let archived = args.is_present("archived");
     let num = if args.is_present("num") {
         value_t!(args, "num", usize).unwrap_or_else(|e| e.exit())
     } else {
@@ -115,7 +116,8 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     }
 
     let mut nodes: Vec<nodes::Node> = Vec::new();
-    for node in storage.nodes() {
+    let list = if archived { storage.archived() } else { storage.nodes() };
+    for node in list {
         let mut meta = match node.load_meta() {
             Ok(a) => a,
             Err(e) => {
@@ -225,7 +227,7 @@ pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
         None => {
             println!("Invalid node reference: {}", node_ref);
             return -1;
-        }, 
+        },
     };
 
     let storage = match storage {
@@ -244,7 +246,7 @@ pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
                     return -2;
                 }
             };
-            
+
             match storage_for_path(&config, PathBuf::from(&from)) {
                 Some(a) => a,
                 None => {
@@ -299,8 +301,21 @@ pub fn add(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     0
 }
 
+pub fn archive(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    let ids = values_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
+    let mut res = 0;
+    for id in ids {
+        if let Err(e) = nodes::Node::new(storage, id).toggle_archive() {
+            println!("Failed to (un)archive node {}: {}", id, e);
+            res += 1;
+        }
+    }
+
+    res
+}
+
 // private util
-fn program_for_entry(config: &toml::Value, entry: &str) 
+fn program_for_entry(config: &toml::Value, entry: &str)
         -> Option<Vec<String>> {
     match config.find(&entry) {
         Some(val) => match val {
@@ -313,7 +328,7 @@ fn program_for_entry(config: &toml::Value, entry: &str)
                     if let Some(arg) = val.as_str() {
                         v.push(arg.to_string());
                     } else {
-                        println!("Invalid program arg for entry {}: {}", 
+                        println!("Invalid program arg for entry {}: {}",
                             entry, val);
                     }
                 }
@@ -379,7 +394,7 @@ fn build_program(config: &nodes::Config, cat: &str, ntype: &str)
 
 fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
     lazy_static! {
-        static ref REGEX: regex::Regex = 
+        static ref REGEX: regex::Regex =
             regex::Regex::new("\
                 (^|[~\\\\])
                 @(full_content|\
@@ -393,7 +408,7 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
 
     // TODO: signal error on return? don't just continue
     // TODO: performance: don't load content multiple times, cache meta?
-    
+
     let mut used = false;
     let mut cpy = String::new();
     'args: for arg in prog.iter_mut() {
@@ -420,7 +435,7 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
                         let f = match File::open(node.node_path()) {
                             Ok(a) => a,
                             Err(e) => {
-                                println!("Failed to open '{}': {}", 
+                                println!("Failed to open '{}': {}",
                                         node.id(), e);
                                 continue;
                             },
@@ -443,19 +458,19 @@ fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
                     }, "id" => {
                         cpy.insert_str(first.start(), &node.id().to_string());
                     }, "node_path" => {
-                        cpy.insert_str(first.start(), 
+                        cpy.insert_str(first.start(),
                             &node.node_path().to_str().unwrap());
                     }, "storage_name" => {
-                        cpy.insert_str(first.start(), 
+                        cpy.insert_str(first.start(),
                             node.storage().name());
                     }, "storage_path" => {
-                        cpy.insert_str(first.start(), 
+                        cpy.insert_str(first.start(),
                             node.storage().path().to_str().unwrap());
                     }, _ => {
                         if first.as_str().starts_with("meta") {
                             let entry = capture.get(2).unwrap().as_str();
                             let meta = node.load_meta().unwrap();
-                            let s = meta.find(entry).and_then(|e|  
+                            let s = meta.find(entry).and_then(|e|
                                     toml::ser::to_string_pretty(&e).ok())
                                 .unwrap_or("".to_string());
                             cpy.insert_str(first.start(), &s);
@@ -587,7 +602,7 @@ struct NodeRef<'a> {
 
 fn parse_node_ref<'a>(node_ref: &'a str) -> Option<NodeRef<'a>> {
     lazy_static! {
-        static ref REGEX: regex::Regex = 
+        static ref REGEX: regex::Regex =
             regex::Regex::new("([0-9]+)@(?:nodes|n)?:([^@]+)?")
                 .expect("Internal invalid regex");
     }
@@ -615,10 +630,10 @@ fn parse_node_ref<'a>(node_ref: &'a str) -> Option<NodeRef<'a>> {
 // known (by the given config), and if so set its name correctly
 
 /// Returns the the storage at the given path.
-/// Basically tests path and it's parent directory for a 
+/// Basically tests path and it's parent directory for a
 /// storage file. If it exists (and is valid) returns its name.
 /// The name of storage will be set to the folder it is in.
-fn storage_for_path(config: &nodes::Config, mut path: PathBuf) 
+fn storage_for_path(config: &nodes::Config, mut path: PathBuf)
         -> Option<nodes::Storage> {
     if path.is_relative() {
         path = match env::current_dir() {
@@ -645,7 +660,7 @@ fn storage_for_path(config: &nodes::Config, mut path: PathBuf)
 
     if path.is_file() {
         path.pop();
-    } 
+    }
 
     if path.is_dir() {
         path.push("storage");
@@ -693,7 +708,7 @@ fn append_toml(dst: &mut toml::Value, src: &toml::Value) {
 fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
     // TODO: error handling; maybe only try this for textual
     // nodes in the first place? How to differentiate?
-    
+
     // check if we can read the first line, in which case
     // we will check (and strip) it for metadata annotations
     let mut data = Vec::new();

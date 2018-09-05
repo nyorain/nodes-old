@@ -20,7 +20,7 @@ fn ret_main() -> i32 {
         (author: "nyorain [at gmail dot com]")
         (about: "Manages your node system from the command line")
         (@arg storage: -s --storage +takes_value "The storage to use")
-        (@arg local: -l --local 
+        (@arg local: -l --local
             conflicts_with("storage")
             "Search for a local node storage in current directory")
         (@subcommand create =>
@@ -29,7 +29,7 @@ fn ret_main() -> i32 {
             (@arg meta: !required index(1) "Associate metadata with this node")
             (@arg tags: -t --tag +takes_value !required ... +use_delimiter
                 "Tag the node")
-            (@arg type: --type +takes_value !required 
+            (@arg type: --type +takes_value !required
                 "Type of node to create, will open matching editor")
             (@arg content: -c --content +takes_value !required
                 "Write this content into the node instead of open an editor")
@@ -45,7 +45,7 @@ fn ret_main() -> i32 {
             (@arg name: !required index(2) "Name of new node, id by default")
         ) (@subcommand ls =>
             (about: "Lists existing notes")
-            (@arg pattern: index(1) 
+            (@arg pattern: index(1)
                 "Only list nodes matching this pattern")
             (@arg num: -n --num +takes_value
                 default_value("10")
@@ -63,6 +63,8 @@ fn ret_main() -> i32 {
                 "Reverses the order")
             (@arg reverse_list: -r --revlist !takes_value !required
                 "Reverses the display order")
+            (@arg archived: -a !takes_value !required
+                "Show only archived nodes")
         // ) (@subcommand show =>
         //     (about: "Shows a node")
         //     (alias: "s")
@@ -75,9 +77,14 @@ fn ret_main() -> i32 {
             (@arg meta: -m --meta "Edit the meta file instead")
         ) (@subcommand ref =>
            (@arg ref: +required index(1) "The node reference")
-           (@arg from: index(2) 
+           (@arg from: index(2)
                 "Origin node path. Needed for 'this' storage")
            (about: "Resolves a node reference to a path")
+        ) (@subcommand archive =>
+            (about: "Toggles archived state of node")
+            (@arg id: +required +multiple index(1)
+                {is_uint}
+                "Id of node to archive")
         ) (@subcommand config =>
             (about: "Edit config file")
         )
@@ -113,10 +120,11 @@ fn ret_main() -> i32 {
         ("create", Some(s)) => commands::create(&mut storage, s),
         ("add", Some(s)) => commands::add(&mut storage, s),
         ("ls", Some(s)) => commands::ls(&mut storage, s),
+        ("archive", Some(s)) => commands::archive(&mut storage, s),
         (_, Some(_)) => {
             println!("Currently not supported");
             return 2;
-        } _ => commands::ls(&mut storage, 
+        } _ => commands::ls(&mut storage,
                           &clap::ArgMatches::default())
     }
 }
