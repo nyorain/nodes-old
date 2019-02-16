@@ -35,9 +35,9 @@ fn ret_main() -> i32 {
                 "Write this content into the node instead of open an editor")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
-            (@arg id: +required +multiple index(1)
-                {is_uint}
-                "The nodes id. Can also specify multiple nodes")
+            (@arg id: +multiple index(1) {is_uint}
+                "The nodes id. Can also specify multiple nodes.
+                If not given, will read from stdin")
         ) (@subcommand add =>
             (about: "Creates a new node from an existing file")
             (alias: "a")
@@ -65,6 +65,8 @@ fn ret_main() -> i32 {
                 "Reverses the display order")
             (@arg archived: -a !takes_value !required
                 "Show only archived nodes")
+            (@arg debug_condition: -d !takes_value !required +hidden
+                "Debug the condition tree")
         // ) (@subcommand show =>
         //     (about: "Shows a node")
         //     (alias: "s")

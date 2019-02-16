@@ -15,9 +15,12 @@
 - [ ] first try of file type parsing
 - [ ] command to modify meta data (without using 'edit --meta')
 - [ ] shortcuts for meta fields (like n for name or t for tags. c for content?)
+      also allow to use the meta fields as flags in create (if possible)
 
 ## More idea like:
 
+- [ ] store in meta file whether node is archived? we currently have to
+      guess/trial-error every time
 - [ ] add more config options
   - [ ] custom tracking of accessed/modified nodes
   - [ ] own, internal (per-storage?) node-list

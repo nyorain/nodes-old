@@ -29,9 +29,20 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         let node = storage.next_node();
 
         let mut meta = toml::Value::new();
+
+        // tag values
+        if args.is_present("tags") {
+            let toml_tags = value_t!(args, "tags", toml::Value)
+                .unwrap_or_else(|e| e.exit());
+            meta.set("tags", toml_tags);
+        }
+
         if let Some(val) = args.value_of("meta") {
             let mut val = val.replace(";", "\n");
-            parse_meta(&val, &mut meta);
+            if let Err(err) = parse_meta(&val, &mut meta) {
+                println!("Failed to parse 'meta' flag: {}", err);
+                return -6;
+            }
         }
 
         if let Some(content) = args.value_of("content") {
@@ -100,6 +111,14 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         None => None
     };
 
+    // debug argument
+    if args.is_present("debug_condition") {
+        if let &Some(ref tree) = &tree {
+            pattern::print_cond(tree);
+            println!("");
+        }
+    }
+
     let archived = args.is_present("archived");
     let num = if args.is_present("num") {
         value_t!(args, "num", usize).unwrap_or_else(|e| e.exit())
@@ -129,7 +148,11 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
         // check condition
         if let &Some(ref tree) = &tree {
-            if !pattern::node_matches(&meta, &tree) {
+            let meta_node = pattern::MetaNode{
+                node: &node,
+                meta: &meta,
+            };
+            if !pattern::node_matches(&meta_node, &tree) {
                 continue;
             }
         }
@@ -206,17 +229,60 @@ pub fn config(config: &nodes::Config, _args: &clap::ArgMatches) -> i32 {
     }
 }
 
-pub fn rm(storage: &nodes::Storage, args: &clap::ArgMatches) -> i32 {
-    let ids = values_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
-    let mut res = 0;
-    for id in ids {
-        if let Err(e) = nodes::Node::new(storage, id).remove() {
-            println!("Failed to remove node {}: {}", id, e);
-            res += 1;
-        }
-    }
+// helper function that applies the given function on all the ids
+// passed in the given argument (if present) or otherwise over stdin.
+// If operating on stdin, returns the number of invalid lines, otherwise 0.
+// The passed function will be called for every node and must return
+// whether it was succesful.
+pub fn operate_ids_stdin<F: Fn(&mut nodes::Node) -> bool>(
+        storage: &nodes::Storage, args: &clap::ArgMatches,
+        argname: &str, op: F) -> i32 {
 
-    res
+    let mut res = 0;
+    if args.is_present(argname) {
+        let ids = values_t!(args, argname, u64).unwrap_or_else(|e| e.exit());
+        for id in ids {
+            if !op(&mut nodes::Node::new(storage, id)) {
+                res += 1
+            }
+        }
+        res
+    } else {
+        let stdin = io::stdin();
+        for rline in stdin.lock().lines() {
+            let line = match rline {
+                Err(err) => {
+                    println!("Failed to read line: {}", err);
+                    res += 1;
+                    continue
+                }, Ok(l) => l,
+            };
+
+            let id = match line.parse() {
+                Err(err) => {
+                    println!("Failed to parse line '{}' as id: {}", line, err);
+                    res += 1;
+                    continue;
+                }, Ok(i) => i,
+            };
+
+            if !op(&mut nodes::Node::new(storage, id)) {
+                res += 1
+            }
+        }
+
+        res
+    }
+}
+
+pub fn rm(storage: &nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    operate_ids_stdin(storage, args, "id", |node: &mut nodes::Node| -> bool {
+        if let Err(e) = node.remove() {
+            println!("Failed to remove node {}: {}", node.id(), e);
+            return false
+        }
+        true
+    })
 }
 
 pub fn ref_path(config: &nodes::Config, args: &clap::ArgMatches) -> i32 {
@@ -290,7 +356,7 @@ pub fn add(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         if let Err(err) = meta.save(node.meta_path()) {
             println!("Failed to save node meta file: {}", err);
             fs::remove_file(node.node_path())
-                .expect("Failed to removed node file");
+                .expect("Failed to remove node file");
             return -2;
         }
 
@@ -302,16 +368,13 @@ pub fn add(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 }
 
 pub fn archive(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
-    let ids = values_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
-    let mut res = 0;
-    for id in ids {
-        if let Err(e) = nodes::Node::new(storage, id).toggle_archive() {
-            println!("Failed to (un)archive node {}: {}", id, e);
-            res += 1;
+    operate_ids_stdin(storage, args, "id", |node: &mut nodes::Node| -> bool {
+        if let Err(e) = node.toggle_archive() {
+            println!("Failed to (un)archive node {}: {}", node.id(), e);
+            return false;
         }
-    }
-
-    res
+        true
+    })
 }
 
 // private util
@@ -675,34 +738,67 @@ fn storage_for_path(config: &nodes::Config, mut path: PathBuf)
     load_storage(path)
 }
 
-// TODO: return error/msg
-fn parse_meta(s: &str, val: &mut toml::Value) -> bool {
+// Parses the given string as meta tags (toml) and tries to add it
+// to the already existing meta toml table.
+fn parse_meta(s: &str, val: &mut toml::Value) -> Result<(), String> {
     let parsed = match s.parse::<toml::Value>() {
         Ok(a) => a,
         Err(e) => {
-            println!("Failed to parse given meta toml '{}': {:?}", s, e);
-            return false;
+            return Err(format!("Failed to parse meta toml '{}': {:?}", s, e));
         }
     };
 
     // append it
-    append_toml(val, &parsed);
-    true
+    return append_toml(val, &parsed);
 }
 
-fn append_toml(dst: &mut toml::Value, src: &toml::Value) {
+// Tries to appends the toml stored in src to the toml stored in dst.
+// Will fail if there are duplicates, but append to arrays and insert
+// into tables (recursively).
+fn append_toml(dst: &mut toml::Value, src: &toml::Value) -> Result<(), String> {
+    // we only handle top-level entries, everything else is handled
+    // recursively
     match src {
-        &toml::Value::Table(ref t) => {
-            for pair in t {
+        // table: recursive call but also insert new entries
+        &toml::Value::Table(ref table) => {
+            for pair in table {
                 if let Some(val) = dst.find_mut(pair.0) {
-                    append_toml(val, pair.1);
-                    continue;
+                    match append_toml(val, pair.1) {
+                        Err(err) => return Err(err),
+                        Ok(_) => continue,
+                    }
                 }
 
+                // new entry, insert it
                 dst.set(pair.0, pair.1.clone());
             }
-        }, _ => *dst = src.clone(),
+        },
+        // array: insert new values at end but make sure that the types
+        // still match
+        &toml::Value::Array(_) => {
+            let dst_array = dst.as_array_mut().unwrap();
+            if let &toml::Value::Array(ref src_array) = src {
+                for srcel in src_array {
+                    if !dst_array.is_empty() && !dst_array[0].same_type(srcel) {
+                        return Err("Incomptabile meta array value types"
+                            .to_string())
+                    }
+
+                    dst_array.push(srcel.clone());
+                }
+            } else {
+                return Err("Incomptabile meta array value".to_string())
+            }
+        },
+        // otherwise we try to overwrite a value. This is an error.
+        // mainly required when called recursively
+        _ => {
+            // *dst = src.clone()
+            return Err("Duplicate meta value".to_string())
+        }
     }
+
+    Ok(())
 }
 
 fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
@@ -722,13 +818,17 @@ fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
             },
         };
 
+        // TODO: read all lines until one without "nodes: " comes?
         let reader = BufReader::new(&file);
         let mut lines = reader.lines();
         if let Some(Ok(mut line)) = lines.next() {
             if line.starts_with("nodes: ") {
                 line.drain(0..7);
                 line = line.replace(";", "\n");
-                parse_meta(&line, meta);
+                if let Err(err) = parse_meta(&line, meta) {
+                    println!("Invalid node meta: {}", err);
+                    return
+                }
 
                 let mut reader = BufReader::new(&file);
                 reader.seek(io::SeekFrom::Start(0)).unwrap();
