@@ -2,6 +2,7 @@
 #[macro_use] extern crate lazy_static;
 extern crate nodes;
 extern crate regex;
+extern crate termion;
 
 mod commands;
 
@@ -89,6 +90,8 @@ fn ret_main() -> i32 {
                 "Id of node to archive")
         ) (@subcommand config =>
             (about: "Edit config file")
+        ) (@subcommand select =>
+            (about: "Select a list of nodes, ids will be printed to stdout")
         )
     ).get_matches();
 
@@ -123,6 +126,7 @@ fn ret_main() -> i32 {
         ("add", Some(s)) => commands::add(&mut storage, s),
         ("ls", Some(s)) => commands::ls(&mut storage, s),
         ("archive", Some(s)) => commands::archive(&mut storage, s),
+        ("select", Some(s)) => commands::select(&mut storage, s),
         (_, Some(_)) => {
             println!("Currently not supported");
             return 2;

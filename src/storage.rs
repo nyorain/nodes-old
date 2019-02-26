@@ -106,7 +106,8 @@ impl<'a> Storage<'a> {
         Node::new(self, self.next_id())
     }
 
-    fn list_nodes(&self, path: &PathBuf, archived: bool) -> Vec<Node> {
+    // TODO: should probably return iterator?
+    fn list_nodes<'b>(&'b self, path: &PathBuf, archived: bool) -> Vec<Node<'a, 'b>> {
         let dir = match fs::read_dir(path) {
             Ok(a) => a,
             Err(_) => {

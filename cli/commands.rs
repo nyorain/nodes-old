@@ -19,6 +19,12 @@ use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 
+use termion::event::Key;
+use termion::screen::*;
+use termion::input::TermRead;
+use termion::raw::IntoRawMode;
+use std::io::{Write, stdout};
+
 const DEFAULT_NODE_TYPE: &str = "text";
 const SUMMARY_SIZE: usize = 70;
 const LS_COUNT_DEFAULT: usize = 30;
@@ -99,13 +105,14 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     0
 }
 
-pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches)
+        -> Option<Vec<nodes::Node<'a, 'a>>> {
     let tree = match args.value_of("pattern") {
         Some(p) => match pattern::parse_condition(p) {
             Ok(a) => Some(a),
             Err(err) => {
                 println!("Could not parse condition pattern: {}", err);
-                return -1;
+                return None;
             },
         }
         None => None
@@ -128,11 +135,6 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             .and_then(|v| v.as_integer()).map(|v| v as usize)
             .unwrap_or(LS_COUNT_DEFAULT)
     };
-
-    let mut lines = value_t!(args, "lines", u64).unwrap_or(1);
-    if args.is_present("full") {
-        lines = 10000; // TODO, we can do better than this!
-    }
 
     let mut nodes: Vec<nodes::Node> = Vec::new();
     let list = if archived { storage.archived() } else { storage.nodes() };
@@ -170,6 +172,22 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     if !args.is_present("reverse_list") {
         nodes.reverse();
     }
+
+    Some(nodes)
+}
+
+pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    let mut lines = value_t!(args, "lines", u64).unwrap_or(1);
+    if args.is_present("full") {
+        lines = 10000; // TODO, we can do better than this!
+    }
+
+    let nodes = match list(storage, args) {
+        Some(n) => n,
+        None => {
+            return -1;
+        }
+    };
 
     for node in nodes {
         list_node(&node, lines);
@@ -852,4 +870,127 @@ fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
             return;
         }
     }
+}
+
+struct SelectNode {
+    id: u32,
+    summary: String,
+    selected: bool,
+}
+
+fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
+        start: usize, current: usize, maxy: u16) {
+    let offset = 4;
+    let x = 1 + offset;
+    let mut y = 1 + offset;
+    let mut i = start;
+    for node in nodes[start..].iter() {
+        if i == current {
+            write!(screen, "{}",
+                termion::color::Bg(termion::color::LightBlack)).unwrap();
+        } else {
+            write!(screen, "{}",
+                termion::color::Bg(termion::color::Reset)).unwrap();
+        }
+
+        if y > (maxy - offset) {
+            break;
+        }
+
+        let fill = if node.selected {
+            'x'
+        } else {
+            ' '
+        };
+
+        write!(screen, "{}[{}] {}: {:<w$}",
+            termion::cursor::Goto(x, y), fill,
+            node.id, node.summary, w = SUMMARY_SIZE).unwrap();
+        y += 1;
+        i += 1;
+    }
+}
+
+pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    let lnodes = match list(storage, args) {
+        Some(n) => n,
+        None => {
+            return -1;
+        }
+    };
+
+    let mut nodes: Vec<SelectNode> = Vec::new();
+    for node in lnodes {
+        nodes.push(SelectNode{
+            id: node.id() as u32,
+            summary: node_summary(&node.node_path(), 1),
+            selected: false
+        });
+    }
+
+    let (_, maxy) = termion::terminal_size().unwrap();
+
+    // setup terminal
+    {
+        let mut start: usize = 0; // start index in node vec
+        let mut current: usize = 0; // current/focused index in node vec
+        let mut currenty: u16 = 1; // current/focused y position
+
+        let stdin = io::stdin();
+        let raw = match stdout().into_raw_mode() {
+            Ok(r) => r,
+            Err(err) => {
+                println!("Failed to transform stdout into raw mode: {}", err);
+                return -1;
+            }
+        };
+
+        let mut screen = AlternateScreen::from(raw);
+        if let Err(err) = write!(screen, "{}", termion::cursor::Hide) {
+            println!("Failed to hide cursor in selection screen: {}", err);
+            return -2;
+        }
+
+        write_select_list(&mut screen, &nodes, start, current, maxy);
+        screen.flush().unwrap();
+
+        for c in stdin.keys() {
+            match c.unwrap() {
+                Key::Char('q') => break,
+                Key::Char('j') if current < nodes.len() - 1 => {
+                    current += 1;
+                    if currenty == maxy {
+                        start += 1;
+                    } else {
+                        currenty += 1;
+                    }
+                },
+                Key::Char('k') if current > 0 => {
+                    current -= 1;
+                    if currenty == 1 {
+                        start -= 1;
+                    } else {
+                        currenty -= 1;
+                    }
+                },
+                Key::Char('\n') => {
+                    nodes[current].selected ^= true;
+                }
+                _ => (),
+            }
+
+        write_select_list(&mut screen, &nodes, start, current, maxy);
+            screen.flush().unwrap();
+        }
+
+        write!(screen, "{}", termion::cursor::Show).unwrap();
+    }
+
+    for node in nodes {
+        if node.selected {
+            println!("{}", node.id);
+        }
+    }
+
+    return 0
 }
