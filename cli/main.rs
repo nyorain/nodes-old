@@ -85,9 +85,9 @@ fn ret_main() -> i32 {
            (about: "Resolves a node reference to a path")
         ) (@subcommand archive =>
             (about: "Toggles archived state of node")
-            (@arg id: +required +multiple index(1)
-                {is_uint}
-                "Id of node to archive")
+            (@arg id: +multiple index(1) {is_uint}
+                "Id of node to archive. Can also specify multiple nodes.
+                If not given, will read from stdin")
         ) (@subcommand config =>
             (about: "Edit config file")
         ) (@subcommand select =>

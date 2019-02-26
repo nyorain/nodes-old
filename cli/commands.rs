@@ -18,12 +18,12 @@ use std::path::PathBuf;
 use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
+use std::io::Write;
 
 use termion::event::Key;
 use termion::screen::*;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
-use std::io::{Write, stdout};
 
 const DEFAULT_NODE_TYPE: &str = "text";
 const SUMMARY_SIZE: usize = 70;
@@ -879,10 +879,9 @@ struct SelectNode {
 }
 
 fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
-        start: usize, current: usize, maxy: u16) {
-    let offset = 4;
-    let x = 1 + offset;
-    let mut y = 1 + offset;
+        start: usize, current: usize, starty: u16, maxy: u16) {
+    let x = 1;
+    let mut y = starty;
     let mut i = start;
     for node in nodes[start..].iter() {
         if i == current {
@@ -893,7 +892,7 @@ fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
                 termion::color::Bg(termion::color::Reset)).unwrap();
         }
 
-        if y > (maxy - offset) {
+        if y > maxy {
             break;
         }
 
@@ -928,7 +927,13 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         });
     }
 
-    let (_, maxy) = termion::terminal_size().unwrap();
+    // problem: when stdin isn't /dev/tty
+    // let tty = fs::File::open("/dev/tty").unwrap();
+    // TODO: https://github.com/redox-os/termion/blob/master/src/sys/unix/size.rs
+    let maxy = match termion::terminal_size() {
+        Ok((_,y)) => y,
+        _ => 80 // guess
+    };
 
     // setup terminal
     {
@@ -937,21 +942,21 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         let mut currenty: u16 = 1; // current/focused y position
 
         let stdin = io::stdin();
-        let raw = match stdout().into_raw_mode() {
+        let raw = match termion::get_tty().and_then(|tty| tty.into_raw_mode()) {
             Ok(r) => r,
             Err(err) => {
-                println!("Failed to transform stdout into raw mode: {}", err);
-                return -1;
+                println!("Failed to transform tty into raw mode: {}", err);
+                return -2;
             }
         };
 
         let mut screen = AlternateScreen::from(raw);
         if let Err(err) = write!(screen, "{}", termion::cursor::Hide) {
             println!("Failed to hide cursor in selection screen: {}", err);
-            return -2;
+            return -3;
         }
 
-        write_select_list(&mut screen, &nodes, start, current, maxy);
+        write_select_list(&mut screen, &nodes, start, current, 1, maxy);
         screen.flush().unwrap();
 
         for c in stdin.keys() {
@@ -979,7 +984,8 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 _ => (),
             }
 
-        write_select_list(&mut screen, &nodes, start, current, maxy);
+            // TODO: only render changed lines?
+            write_select_list(&mut screen, &nodes, start, current, 1, maxy);
             screen.flush().unwrap();
         }
 
