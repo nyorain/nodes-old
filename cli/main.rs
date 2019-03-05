@@ -15,6 +15,14 @@ fn ret_main() -> i32 {
         }
     }
 
+    fn is_node(v: String) -> Result<(), String> {
+        if v == "le" || v == "lc" || v == "lv" || v == "l" {
+            return Ok(());
+        }
+
+        is_uint(v)
+    }
+
     let matches = clap_app!(nodes =>
         (version: "0.1")
         (setting: clap::AppSettings::VersionlessSubcommands)
@@ -36,7 +44,7 @@ fn ret_main() -> i32 {
                 "Write this content into the node instead of open an editor")
         ) (@subcommand rm =>
             (about: "Removes a node (by id)")
-            (@arg id: +multiple index(1) {is_uint}
+            (@arg id: +multiple index(1) {is_node}
                 "The nodes id. Can also specify multiple nodes.
                 If not given, will read from stdin")
         ) (@subcommand add =>
@@ -56,10 +64,6 @@ fn ret_main() -> i32 {
                 {is_uint}
                 "How many lines to show at maximum from a node")
             (@arg full: -f --full conflicts_with("lines") "Print full nodes")
-            (@arg sort: -s --sort
-                +case_insensitive
-                default_value("id")
-                +takes_value "Order of displayed nodes")
             (@arg reverse: -R --rev !takes_value !required
                 "Reverses the order")
             (@arg reverse_list: -r --revlist !takes_value !required
@@ -68,15 +72,15 @@ fn ret_main() -> i32 {
                 "Show only archived nodes")
             (@arg debug_condition: -d !takes_value !required +hidden
                 "Debug the condition tree")
-        // ) (@subcommand show =>
-        //     (about: "Shows a node")
-        //     (alias: "s")
-        //     (@arg id: +required index(1) {is_uint} "Id of node to show")
-        //     (@arg meta: -m --meta "Shows the meta file instead")
+        ) (@subcommand show =>
+            (about: "Shows a node")
+            (alias: "s")
+            (@arg id: +required index(1) {is_node} "Id of node to show")
+            (@arg meta: -m --meta "Shows the meta file instead")
         ) (@subcommand edit =>
             (about: "Edits a node")
             (alias: "e")
-            (@arg id: +required index(1) {is_uint} "Id of node to edit")
+            (@arg id: +required index(1) {is_node} "Id of node to edit")
             (@arg meta: -m --meta "Edit the meta file instead")
         ) (@subcommand ref =>
            (@arg ref: +required index(1) "The node reference")
@@ -85,13 +89,28 @@ fn ret_main() -> i32 {
            (about: "Resolves a node reference to a path")
         ) (@subcommand archive =>
             (about: "Toggles archived state of node")
-            (@arg id: +multiple index(1) {is_uint}
+            (@arg id: +multiple index(1) {is_node}
                 "Id of node to archive. Can also specify multiple nodes.
                 If not given, will read from stdin")
         ) (@subcommand config =>
             (about: "Edit config file")
         ) (@subcommand select =>
             (about: "Select a list of nodes, ids will be printed to stdout")
+            (@arg pattern: index(1)
+                "Only list nodes matching this pattern")
+            (@arg num: -n --num +takes_value
+                default_value("999999")
+                {is_uint}
+                "Maximum number of nodes to show")
+            (@arg archived: -a !takes_value !required
+                "Show only archived nodes")
+            (@arg debug_condition: -d !takes_value !required +hidden
+                "Debug the condition tree")
+            (@arg reverse: -R --rev !takes_value !required
+                "Reverses the order")
+            (@arg reverse_list: -r --revlist !takes_value !required
+                "Reverses the display order")
+
         )
     ).get_matches();
 
@@ -127,11 +146,14 @@ fn ret_main() -> i32 {
         ("ls", Some(s)) => commands::ls(&mut storage, s),
         ("archive", Some(s)) => commands::archive(&mut storage, s),
         ("select", Some(s)) => commands::select(&mut storage, s),
+        ("show", Some(s)) => commands::show(&mut storage, s),
         (_, Some(_)) => {
             println!("Currently not supported");
             return 2;
-        } _ => commands::ls(&mut storage,
-                          &clap::ArgMatches::default())
+        },
+        // TODO: default action when just a node id is given
+        // e.g. nodes 234 should show/edit that node
+        _ => commands::ls(&mut storage, &clap::ArgMatches::default())
     }
 }
 

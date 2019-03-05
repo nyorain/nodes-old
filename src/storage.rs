@@ -11,13 +11,16 @@ use std::fs::File;
 #[derive(Deserialize, Serialize)]
 pub struct StorageState {
     last_id: u64,
+    last_edited: u64, // edited
+    last_viewed: u64, // only shown but not edited
+    last: u64 // general last interaction with specific node
 }
 
 pub struct Storage<'a> {
     config: &'a Config,
     name: String,
     path: PathBuf,
-    state: StorageState
+    state: StorageState,
 }
 
 #[derive(Debug)]
@@ -64,6 +67,7 @@ impl<'a> Storage<'a> {
     /// Uses the current next_id, i.e. increases the id counter.
     pub fn use_id(&mut self) {
         self.state.last_id += 1;
+        self.state.last = self.state.last_id;
     }
 
     /// Returns the path of this storage
@@ -98,6 +102,42 @@ impl<'a> Storage<'a> {
         let mut path = self.nodes_path();
         path.push("archive");
         self.list_nodes(&path, true)
+    }
+
+    /// Updates the last edited field
+    pub fn edited(&mut self, id: u64) {
+        self.state.last_edited = id;
+        self.state.last = id;
+    }
+
+    /// Updates the last viewed field
+    pub fn viewed(&mut self, id: u64) {
+        self.state.last_viewed = id;
+        self.state.last = id;
+    }
+
+    /// Tries to interpret the given string as node name/id.
+    /// Returns the referenced node on success. Will return an error
+    /// if the given node doesn't exist.
+    pub fn parse(&self, name: &str) -> Result<Node, String> {
+        // last created
+        let id = match name {
+            "lc" => self.state.last_id,
+            "le" => self.state.last_edited,
+            "lv" => self.state.last_viewed,
+            "l" => self.state.last,
+            _ => match name.parse::<u64>() {
+                Err(_) => return Err(format!("Could not parse '{}' as id", name)),
+                Ok(i) => i,
+            }
+        };
+
+        let node = Node::new(&self, id);
+        if !node.exists() {
+            return Err(format!("Node {} doesn't exist", id));
+        }
+
+        Ok(node)
     }
 
     // TODO: id inc should probably be compile-time checked

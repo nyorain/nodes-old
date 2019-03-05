@@ -11,6 +11,7 @@ use nodes::toml::ValueImpl;
 use std::io;
 use std::env;
 use std::fs;
+use std::cmp;
 use std::process;
 
 use std::io::BufReader;
@@ -19,6 +20,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::Write;
+use std::io::BufWriter;
 
 use termion::event::Key;
 use termion::screen::*;
@@ -26,7 +28,7 @@ use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 
 const DEFAULT_NODE_TYPE: &str = "text";
-const SUMMARY_SIZE: usize = 70;
+const SUMMARY_SIZE: usize = 70; // TODO: dynamic, based on terminal size!
 const LS_COUNT_DEFAULT: usize = 30;
 
 pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
@@ -105,8 +107,10 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     0
 }
 
-fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches)
-        -> Option<Vec<nodes::Node<'a, 'a>>> {
+// arg reverse: whether to invert the meaning of the reverse flag
+// arg reverse_list: whether to invert the meaning of the reverse_list flag
+fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches,
+        reverse: bool, reverse_list: bool) -> Option<Vec<nodes::Node<'a, 'a>>> {
     let tree = match args.value_of("pattern") {
         Some(p) => match pattern::parse_condition(p) {
             Ok(a) => Some(a),
@@ -163,13 +167,13 @@ fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches)
     }
 
     nodes.sort_by_key(|v| v.id());
-    if !args.is_present("reverse") {
+    if reverse ^ !args.is_present("reverse") {
         nodes.reverse();
     }
 
     nodes.truncate(num);
 
-    if !args.is_present("reverse_list") {
+    if reverse_list ^ !args.is_present("reverse_list") {
         nodes.reverse();
     }
 
@@ -179,10 +183,10 @@ fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches)
 pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     let mut lines = value_t!(args, "lines", u64).unwrap_or(1);
     if args.is_present("full") {
-        lines = 10000; // TODO, we can do better than this!
+        lines = 99999; // TODO, we can do better than this!
     }
 
-    let nodes = match list(storage, args) {
+    let nodes = match list(storage, args, false, false) {
         Some(n) => n,
         None => {
             return -1;
@@ -197,43 +201,57 @@ pub fn ls(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 }
 
 pub fn edit(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
-    let id = value_t!(args, "id", u64).unwrap_or_else(|e| e.exit());
-    let node = nodes::Node::new(storage, id);
-    let meta = args.is_present("meta");
+    let r: i32;
+    let id: u64;
+    let idstr = value_t!(args, "id", String).unwrap_or_else(|e| e.exit());
 
-    if !node.exists() {
-        println!("Node {} does not exist", id);
-        return -1;
-    }
-
-    if meta {
-        return match spawn_meta(&node) {
-            Ok(v) => v.code().unwrap_or(-2),
+    {
+        let node = match storage.parse(&idstr) {
             Err(e) => {
-                println!("Failed to spawn editor: {}", e);
-                return -3;
+                println!("Invalid node '{}': {}", &idstr, e);
+                return -1;
+            }, Ok(n) => n,
+        };
+
+        id = node.id();
+        let meta = args.is_present("meta");
+        if meta {
+            return match spawn_meta(&node) {
+                Ok(v) => v.code().unwrap_or(-2),
+                Err(e) => {
+                    println!("Failed to spawn editor: {}", e);
+                    return -3;
+                }
             }
         }
+
+        let meta = match node.load_meta() {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Failed to load meta for node {}: {:?}", node.id(), e);
+                return -4;
+            },
+        };
+
+        let nodetype = meta.get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("text");
+        r = match spawn(&node, "edit", nodetype) {
+            Err(e) => {
+                println!("Failed to spawn editor: {}", e);
+                return -5;
+            }, Ok(v) => match v.code() {
+                Some(v2) => v2,
+                None => {
+                    println!("Warning: Signal termination detected");
+                    -6
+                }
+            }
+        };
     }
 
-    let meta = match node.load_meta() {
-        Ok(a) => a,
-        Err(e) => {
-            println!("Failed to load meta for node {}: {:?}", node.id(), e);
-            return -4;
-        },
-    };
-
-    let nodetype = meta.get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("text");
-    match spawn(&node, "edit", nodetype) {
-        Ok(v) => v.code().unwrap_or(-5),
-        Err(e) => {
-            println!("Failed to spawn editor: {}", e);
-            return -6;
-        }
-    }
+    storage.edited(id);
+    r
 }
 
 pub fn config(config: &nodes::Config, _args: &clap::ArgMatches) -> i32 {
@@ -258,9 +276,17 @@ pub fn operate_ids_stdin<F: Fn(&mut nodes::Node) -> bool>(
 
     let mut res = 0;
     if args.is_present(argname) {
-        let ids = values_t!(args, argname, u64).unwrap_or_else(|e| e.exit());
-        for id in ids {
-            if !op(&mut nodes::Node::new(storage, id)) {
+        let ids = values_t!(args, argname, String).unwrap_or_else(|e| e.exit());
+        for idstr in ids {
+            let mut node = match storage.parse(&idstr) {
+                Err(e) => {
+                    println!("Invalid node '{}': {}", &idstr, e);
+                    res += 1;
+                    continue;
+                }, Ok(n) => n,
+            };
+
+            if !op(&mut node) {
                 res += 1
             }
         }
@@ -276,15 +302,15 @@ pub fn operate_ids_stdin<F: Fn(&mut nodes::Node) -> bool>(
                 }, Ok(l) => l,
             };
 
-            let id = match line.parse() {
-                Err(err) => {
-                    println!("Failed to parse line '{}' as id: {}", line, err);
+            let mut node = match storage.parse(&line) {
+                Err(e) => {
+                    println!("Invalid node '{}': {}", line, e);
                     res += 1;
                     continue;
-                }, Ok(i) => i,
+                }, Ok(n) => n,
             };
 
-            if !op(&mut nodes::Node::new(storage, id)) {
+            if !op(&mut node) {
                 res += 1
             }
         }
@@ -879,39 +905,40 @@ struct SelectNode {
 }
 
 fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
-        start: usize, current: usize, starty: u16, maxy: u16) {
+        start: usize, current: usize, starty: u16, maxx: u16, maxy: u16) {
     let x = 1;
     let mut y = starty;
     let mut i = start;
     for node in nodes[start..].iter() {
-        if i == current {
-            write!(screen, "{}",
-                termion::color::Bg(termion::color::LightBlack)).unwrap();
-        } else {
-            write!(screen, "{}",
-                termion::color::Bg(termion::color::Reset)).unwrap();
-        }
-
         if y > maxy {
             break;
         }
 
-        let fill = if node.selected {
-            'x'
-        } else {
-            ' '
-        };
+        if i == current {
+            write!(screen, "{}",
+                termion::color::Bg(termion::color::LightGreen)).unwrap();
+        }
 
-        write!(screen, "{}[{}] {}: {:<w$}",
-            termion::cursor::Goto(x, y), fill,
-            node.id, node.summary, w = SUMMARY_SIZE).unwrap();
+        if node.selected {
+            write!(screen, "{}",
+                termion::color::Fg(termion::color::LightRed)).unwrap();
+        }
+
+        let idstr = node.id.to_string();
+        write!(screen, "{}{}: {:<w$}{}{}",
+            termion::cursor::Goto(x, y),
+            idstr, node.summary,
+            termion::color::Bg(termion::color::Reset),
+            termion::color::Fg(termion::color::Reset),
+            w = (maxx as usize) - idstr.len() - 2).unwrap();
+
         y += 1;
         i += 1;
     }
 }
 
 pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
-    let lnodes = match list(storage, args) {
+    let lnodes = match list(storage, args, false, true) {
         Some(n) => n,
         None => {
             return -1;
@@ -930,9 +957,9 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     // problem: when stdin isn't /dev/tty
     // let tty = fs::File::open("/dev/tty").unwrap();
     // TODO: https://github.com/redox-os/termion/blob/master/src/sys/unix/size.rs
-    let maxy = match termion::terminal_size() {
-        Ok((_,y)) => y,
-        _ => 80 // guess
+    let (maxx, maxy) = match termion::terminal_size() {
+        Ok((x,y)) => (x,y),
+        _ => (80, 100) // guess
     };
 
     // setup terminal
@@ -940,6 +967,7 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         let mut start: usize = 0; // start index in node vec
         let mut current: usize = 0; // current/focused index in node vec
         let mut currenty: u16 = 1; // current/focused y position
+        let mut gpending = 2;
 
         let stdin = io::stdin();
         let raw = match termion::get_tty().and_then(|tty| tty.into_raw_mode()) {
@@ -950,13 +978,14 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
             }
         };
 
-        let mut screen = AlternateScreen::from(raw);
+        let ascreen = AlternateScreen::from(raw);
+        let mut screen = BufWriter::new(ascreen);
         if let Err(err) = write!(screen, "{}", termion::cursor::Hide) {
             println!("Failed to hide cursor in selection screen: {}", err);
             return -3;
         }
 
-        write_select_list(&mut screen, &nodes, start, current, 1, maxy);
+        write_select_list(&mut screen, &nodes, start, current, 1, maxx, maxy);
         screen.flush().unwrap();
 
         for c in stdin.keys() {
@@ -968,6 +997,22 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                         start += 1;
                     } else {
                         currenty += 1;
+                    }
+                },
+                Key::Char('G') => {
+                    current = nodes.len() - 1;
+                    currenty = cmp::min(nodes.len() - 1, maxy as usize) as u16;
+                    start = cmp::max((current as i32) - (maxy as i32), 0) as usize;
+                },
+                Key::Char('g') => {
+                    if gpending == 1 {
+                        start = 0;
+                        current = 0;
+                        currenty = 1;
+
+                        gpending = 2;
+                    } else {
+                        gpending = 0;
                     }
                 },
                 Key::Char('k') if current > 0 => {
@@ -984,8 +1029,12 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 _ => (),
             }
 
+            if gpending < 2 {
+                gpending += 1;
+            }
+
             // TODO: only render changed lines?
-            write_select_list(&mut screen, &nodes, start, current, 1, maxy);
+            write_select_list(&mut screen, &nodes, start, current, 1, maxx, maxy);
             screen.flush().unwrap();
         }
 
@@ -998,5 +1047,32 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
         }
     }
 
-    return 0
+    0
+}
+
+pub fn show(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    // TODO: use spawn and allow different programs as well
+    // requires correct types detection first
+    // don't use "cat" or something for text node types (unless manually
+    // specified), just print out the lines by default (internally!)
+    let idstr = value_t!(args, "id", String).unwrap_or_else(|e| e.exit());
+    let node = match storage.parse(&idstr) {
+        Err(e) => {
+            println!("Invalid node '{}': {}", &idstr, e);
+            return -1;
+        }, Ok(n) => n,
+    };
+
+    let meta = args.is_present("meta");
+    let path = if meta { node.meta_path() } else { node.node_path() };
+
+    let mut s = String::new();
+    let res = File::open(path).and_then(|mut f| f.read_to_string(&mut s));
+    if let Err(e) = res {
+        println!("Failed to read '{}': {}", node.id(), e);
+        return -2;
+    }
+
+    print!("{}", s);
+    0
 }
