@@ -109,7 +109,7 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
 // arg reverse: whether to invert the meaning of the reverse flag
 // arg reverse_list: whether to invert the meaning of the reverse_list flag
-fn list<'a, 'b>(storage: &'a mut nodes::Storage, args: &clap::ArgMatches,
+fn list<'a, 'b>(storage: &'a nodes::Storage, args: &clap::ArgMatches,
         reverse: bool, reverse_list: bool) -> Option<Vec<nodes::Node<'a, 'a>>> {
     let tree = match args.value_of("pattern") {
         Some(p) => match pattern::parse_condition(p) {
@@ -449,14 +449,17 @@ fn program_for_entry(config: &toml::Value, entry: &str)
     }
 }
 
-fn fallback_program(cat: &str) -> Vec<String> {
-    if cat == "create" {
+fn fallback_program(cat: &str, ntype: &str) -> Vec<String> {
+    if cat == "create" { // switch over ntype?
         let editor = match env::var("EDITOR") {
             Ok(a) => a,
             Err(_) => env::var("VISUAL").unwrap_or("vim".to_string()),
         };
 
         vec!(editor)
+    } else if cat == "show" && ntype == "text" {
+        // TODO
+        vec!("less".to_string())
     } else {
         vec!("xdg-open".to_string())
     }
@@ -466,7 +469,7 @@ fn build_program(config: &nodes::Config, cat: &str, ntype: &str)
         -> Vec<String> {
     let config = match config.value() {
         &Some(ref a) => a,
-        &None => return fallback_program(cat)
+        &None => return fallback_program(cat, ntype)
     };
 
     let mut entry = String::from("programs.");
@@ -496,7 +499,7 @@ fn build_program(config: &nodes::Config, cat: &str, ntype: &str)
         return prog;
     }
 
-    return fallback_program(cat);
+    return fallback_program(cat, ntype);
 }
 
 fn patch_program(node: &nodes::Node, prog: &mut Vec<String>) -> bool {
@@ -626,7 +629,8 @@ fn spawn_meta(node: &nodes::Node)
 }
 
 fn list_node(node: &nodes::Node, lines: u64) {
-    let summary = node_summary(&node.node_path(), lines);
+    // TODO: use terminal width
+    let summary = node_summary(&node.node_path(), lines, SUMMARY_SIZE);
 
     if lines == 1 {
         println!("{}:\t{:<w$}",
@@ -641,9 +645,9 @@ fn list_node(node: &nodes::Node, lines: u64) {
 }
 
 
-fn node_summary(path: &PathBuf, lines: u64) -> String {
+fn node_summary(path: &PathBuf, lines: u64, width: usize) -> String {
     if lines == 1 {
-        short_string(&read_node(&path, lines, false), SUMMARY_SIZE)
+        short_string(&read_node(&path, lines, false), width)
     } else {
         read_node(&path, lines, true)
     }
@@ -898,8 +902,8 @@ fn strip_node_meta(node: &nodes::Node, meta: &mut toml::Value) {
     }
 }
 
-struct SelectNode {
-    id: u32,
+struct SelectNode<'a, 'b: 'a> {
+    node: nodes::Node<'a, 'b>,
     summary: String,
     selected: bool,
 }
@@ -924,7 +928,7 @@ fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
                 termion::color::Fg(termion::color::LightRed)).unwrap();
         }
 
-        let idstr = node.id.to_string();
+        let idstr = node.node.id().to_string();
         write!(screen, "{}{}: {:<w$}{}{}",
             termion::cursor::Goto(x, y),
             idstr, node.summary,
@@ -937,7 +941,16 @@ fn write_select_list<W: Write>(screen: &mut W, nodes: &Vec<SelectNode>,
     }
 }
 
+// NOTE: experimental!
 pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
+    // problem: when stdin isn't /dev/tty
+    // let tty = fs::File::open("/dev/tty").unwrap();
+    // TODO: https://github.com/redox-os/termion/blob/master/src/sys/unix/size.rs
+    let (maxx, maxy) = match termion::terminal_size() {
+        Ok((x,y)) => (x,y),
+        _ => (80, 100) // guess
+    };
+
     let lnodes = match list(storage, args, false, true) {
         Some(n) => n,
         None => {
@@ -947,20 +960,13 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
     let mut nodes: Vec<SelectNode> = Vec::new();
     for node in lnodes {
+        let summary = node_summary(&node.node_path(), 1, maxx as usize);
         nodes.push(SelectNode{
-            id: node.id() as u32,
-            summary: node_summary(&node.node_path(), 1),
+            node: node,
+            summary: summary,
             selected: false
         });
     }
-
-    // problem: when stdin isn't /dev/tty
-    // let tty = fs::File::open("/dev/tty").unwrap();
-    // TODO: https://github.com/redox-os/termion/blob/master/src/sys/unix/size.rs
-    let (maxx, maxy) = match termion::terminal_size() {
-        Ok((x,y)) => (x,y),
-        _ => (80, 100) // guess
-    };
 
     // setup terminal
     {
@@ -990,7 +996,9 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
         for c in stdin.keys() {
             match c.unwrap() {
-                Key::Char('q') => break,
+                Key::Char('q') => {
+                    break;
+                }
                 Key::Char('j') if current < nodes.len() - 1 => {
                     current += 1;
                     if currenty == maxy {
@@ -1025,7 +1033,49 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
                 },
                 Key::Char('\n') => {
                     nodes[current].selected ^= true;
-                }
+                },
+                Key::Char('e') => { // edit
+                    // TODO: notetype
+                    // maybe write common function (shared with edit)?
+                    match spawn(&nodes[current].node, "edit", "text") {
+                        Err(e) => {
+                            eprintln!("Failed to spawn editor: {}", e);
+                        }, Ok(v) => if v.code().is_none() {
+                            println!("Warning: Signal termination detected");
+                        }
+                    }
+
+                    // TODO: refresh summary for this node
+
+                    // TODO: fighting the borrow checker
+                    // storage.edited(nodes[current].node.id());
+                    write!(screen, "{}", termion::clear::All).unwrap();
+                },
+                Key::Char('s') => { // show
+                    // TODO
+                    match spawn(&nodes[current].node, "show", "text") {
+                        Err(e) => {
+                            eprintln!("Failed to spawn program: {}", e);
+                        }, Ok(v) => if v.code().is_none() {
+                            println!("Warning: Signal termination detected");
+                        }
+                    }
+
+                    // same TODO s as in edit
+                    write!(screen, "{}", termion::clear::All).unwrap();
+                },
+                // TODO:
+                // - use numbers for navigation
+                // - a: archive
+                // - r: remove (with confirmation?)
+                // - somehow show tags/some meta field (already in preview?)
+                //   should be configurable
+                //   additionally? edit/show meta file
+                // - should a/r be applied to all selected? or to the currently
+                //   hovered? maybe like in ncmpcpp? (selected? selected : hovered)
+                // - allow to open/show multiple at once?
+                //   maybe allow to edit/show selected?
+                // - less-like status bar or something?
                 _ => (),
             }
 
@@ -1043,7 +1093,7 @@ pub fn select(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
     for node in nodes {
         if node.selected {
-            println!("{}", node.id);
+            println!("{}", node.node.id());
         }
     }
 
@@ -1055,6 +1105,7 @@ pub fn show(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
     // requires correct types detection first
     // don't use "cat" or something for text node types (unless manually
     // specified), just print out the lines by default (internally!)
+    // XXX: compare to how show in selected is currently implemented
     let idstr = value_t!(args, "id", String).unwrap_or_else(|e| e.exit());
     let node = match storage.parse(&idstr) {
         Err(e) => {
