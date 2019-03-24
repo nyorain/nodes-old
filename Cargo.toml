@@ -19,6 +19,10 @@ path = "src/lib.rs"
 name = "nodes"
 path = "cli/main.rs"
 
+[[bin]]
+name = "migrate"
+path = "cli/migrate.rs"
+
 [dependencies]
 toml = "0.4"
 clap = "2.29"
@@ -29,3 +33,4 @@ serde_derive = "1.0"
 lazy_static = "1.0"
 nom = "^3.2"
 termion = "1.5"
+chrono = "0.4"

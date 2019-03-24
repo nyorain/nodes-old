@@ -38,9 +38,13 @@ pub fn create(storage: &mut nodes::Storage, args: &clap::ArgMatches) -> i32 {
 
         let mut meta = toml::Value::new();
 
-        // tag values
+        // if args.is_present("tags") {
+        //     let toml_tags = value_t!(args, "tags", toml::Value)
+        //         .unwrap_or_else(|e| e.exit());
+        //     meta.set("tags", toml_tags);
+        // }
         if args.is_present("tags") {
-            let toml_tags = value_t!(args, "tags", toml::Value)
+            let toml_tags = value_t!(args, "tags", String)
                 .unwrap_or_else(|e| e.exit());
             meta.set("tags", toml_tags);
         }

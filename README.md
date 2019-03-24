@@ -1,5 +1,7 @@
 # Nodes
 
+**Abandoned**
+
 A simple note/thought/whatever keeping system.
 Based upon a simple [specification](docs/spec.md) so that everyone
 can easily develop other programs operating on the same set of data.
